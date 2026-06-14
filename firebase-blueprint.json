@@ -1,0 +1,150 @@
+{
+  "entities": {
+    "Class": {
+      "title": "Class",
+      "description": "School Class rooms (e.g. 7A, 8B)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique Class ID" },
+        "name": { "type": "string", "description": "Class Room Name" }
+      },
+      "required": ["id", "name"]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "Learning subjects/mata pelajaran",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique Subject ID" },
+        "name": { "type": "string", "description": "Subject Name" }
+      },
+      "required": ["id", "name"]
+    },
+    "Teacher": {
+      "title": "Teacher",
+      "description": "Teacher account details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Document ID equal to NIK" },
+        "nik": { "type": "string", "description": "Teacher Number (NIK)" },
+        "name": { "type": "string", "description": "Teacher Full Name" },
+        "password": { "type": "string", "description": "Login password" },
+        "subjectsTaught": {
+          "type": "array",
+          "description": "Array of subject allocations and taught classes"
+        }
+      },
+      "required": ["id", "nik", "name", "password", "subjectsTaught"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Student account details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Document ID equal to NIS" },
+        "nis": { "type": "string", "description": "Student ID Number (NIS)" },
+        "name": { "type": "string", "description": "Student Full Name" },
+        "classId": { "type": "string", "description": "Student Class ID reference" },
+        "password": { "type": "string", "description": "Login password" }
+      },
+      "required": ["id", "nis", "name", "classId", "password"]
+    },
+    "Material": {
+      "title": "Material",
+      "description": "Learning material created by teachers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Material ID" },
+        "title": { "type": "string", "description": "Title of material" },
+        "description": { "type": "string", "description": "Short description" },
+        "link": { "type": "string", "description": "URL to Canva, GDocs, etc." },
+        "classId": { "type": "string", "description": "Class target ID" },
+        "subjectId": { "type": "string", "description": "Subject ID" },
+        "teacherId": { "type": "string", "description": "Teacher who posted it" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["id", "title", "description", "link", "classId", "subjectId", "teacherId", "createdAt"]
+    },
+    "Assignment": {
+      "title": "Assignment",
+      "description": "Home assignments/tasks",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "link": { "type": "string" },
+        "classId": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "formEnabled": { "type": "boolean", "description": "Form submission collection status" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "description", "dueDate", "link", "classId", "subjectId", "teacherId", "formEnabled", "createdAt"]
+    },
+    "Grade": {
+      "title": "Grade",
+      "description": "Student assignment submission and grading info",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "assignmentId": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "classId": { "type": "string" },
+        "grade": { "type": "number", "description": "Numeric grade score" },
+        "feedback": { "type": "string", "description": "Teacher feedback / Capaian siswa" },
+        "submissionLink": { "type": "string", "description": "URL submitted by student if form enabled" },
+        "status": { "type": "string", "enum": ["submitted", "graded", "reset"], "description": "Status of grading" },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "gradedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "studentId", "assignmentId", "subjectId", "classId", "status"]
+    },
+    "AdminConfig": {
+      "title": "AdminConfig",
+      "description": "Administrative global credentials and configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Always 'config'" },
+        "adminPassword": { "type": "string" }
+      },
+      "required": ["id", "adminPassword"]
+    }
+  },
+  "firestore": {
+    "/classes/{classId}": {
+      "schema": "Class",
+      "description": "School classes collection"
+    },
+    "/subjects/{subjectId}": {
+      "schema": "Subject",
+      "description": "Subjects collection"
+    },
+    "/teachers/{teacherId}": {
+      "schema": "Teacher",
+      "description": "Teachers collection (Docs keyed by NIK)"
+    },
+    "/students/{studentId}": {
+      "schema": "Student",
+      "description": "Students collection (Docs keyed by NIS)"
+    },
+    "/materials/{materialId}": {
+      "schema": "Material",
+      "description": "Learning materials uploaded by teachers"
+    },
+    "/assignments/{assignmentId}": {
+      "schema": "Assignment",
+      "description": "Homework and tasks assigned by teachers"
+    },
+    "/grades/{gradeId}": {
+      "schema": "Grade",
+      "description": "Grades and submissions for tasks"
+    },
+    "/adminConfigs/{configId}": {
+      "schema": "AdminConfig",
+      "description": "Secure admin configurations"
+    }
+  }
+}

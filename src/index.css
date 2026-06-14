@@ -1,0 +1,71 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  /* Al Irsyad Premium Forest Emerald & Warm Sand Theme (Tradisional-Modern Islami Aesthetic) */
+  --color-slate-50: #FAF6EE;   /* Warm cream/sand background */
+  --color-slate-100: #F3ECE0;  /* Soft linen sand white */
+  --color-slate-150: #E6DBC9;  /* Linen sand metal border */
+  --color-slate-200: #DCCFB7;  /* Muted warm sand outline border */
+  --color-slate-250: #CCBA9E;  /* Soft wood/sand outline */
+  --color-slate-300: #B7A07F;  /* Pastel sandy brown */
+  --color-slate-400: #9E8461;  /* Antique scholars wood */
+  --color-slate-500: #7A6242;  /* Deep charcoal sandy warm bronze text */
+  --color-slate-600: #614D32;  /* Elegant dark wood/sandalwood */
+  --color-slate-700: #483823;  /* Vintage scholarly mahogany */
+  --color-slate-800: #302416;  /* Deep forest sand/bark */
+  --color-slate-900: #1B140C;  /* Midnight coffee black for crisp contrast */
+  --color-slate-950: #0E0A06;  /* Dynamic dark obsidian cocoa space */
+
+  /* Vibrant Islamic Traditional Forest Emerald Branding */
+  --color-teal-50: #EBF5F0;   /* Pale crisp emerald-mint breeze */
+  --color-teal-100: #D3ECD9;  /* Fresh mint-emerald background */
+  --color-teal-150: #B3E1C0;  /* Delicate noble gold/green leaf outline border */
+  --color-teal-200: #8CCF9F;  /* Vibrant spring growth seed */
+  --color-teal-300: #60BD7A;  /* Energetic Islamic traditional green */
+  --color-teal-400: #34A85E;  /* Minty forest emerald accent */
+  --color-teal-500: #1C8E4A;  /* Traditional Al Irsyad prime emerald */
+  --color-teal-600: #11753B;  /* Solid primary branding green-teal */
+  --color-teal-650: #0D6130;  /* Classic royal forest green button hover */
+  --color-teal-700: #0A4F26;  /* Deep Islamic classic bronze-forest green */
+  --color-teal-750: #083E1E;  /* Scholar dark evergreen */
+  --color-teal-800: #052E15;  /* Luxurious deep pine moss */
+  --color-teal-850: #031F0E;  /* Midnight forest moss velvet shadow */
+  --color-teal-900: #02140A;  /* Ground spruce black */
+  --color-teal-950: #010A05;  /* Obsidian true charcoal forest green */
+
+  /* Academic Pure Gold & Saffron Highlights */
+  --color-emerald-50: #FFFDF0;  /* Pale saffron gold */
+  --color-emerald-100: #FEF3C7; /* Light golden glow */
+  --color-emerald-250: #FDE68A; /* Delicate warm brass gold */
+  --color-emerald-500: #F59E0B; /* Traditional warm bright golden accent */
+  --color-emerald-600: #D97706; /* Warm amber gold */
+  --color-emerald-700: #B45309; /* Imperial scholars antique gold */
+  --color-emerald-800: #78350F; /* Scholarly bronze */
+  --color-emerald-950: #451A03; /* Deep roasted copper glaze */
+
+  /* Majestic Scholar Terracotta / Deep Crimson for stats, high-contrast markers */
+  --color-indigo-50: #FFF5F2;
+  --color-indigo-100: #FEE7DB;
+  --color-indigo-150: #FCD2BC;
+  --color-indigo-400: #F87171;
+  --color-indigo-500: #EF4444;
+  --color-indigo-600: #DC2626;  /* Deep royal terracotta */
+  --color-indigo-700: #B91C1C;  /* Traditional red-brick glaze */
+  --color-indigo-800: #991B1B;  /* Crimson scholarly mahogany */
+  --color-indigo-950: #4C0519;  /* Sultan dark ruby shadows */
+
+  /* Font Definitions */
+  --font-sans: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", "Georgia", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-slate-50);
+}
+
+h1, h2, h3, .font-serif-heading {
+  font-family: var(--font-serif);
+}

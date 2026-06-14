@@ -1,0 +1,693 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { 
+  Class, 
+  Subject, 
+  Teacher, 
+  Student, 
+  Material, 
+  Assignment, 
+  Grade, 
+  SessionUser,
+  UserRole
+} from '../types';
+import { 
+  INITIAL_CLASSES, 
+  INITIAL_SUBJECTS, 
+  INITIAL_TEACHERS, 
+  INITIAL_STUDENTS, 
+  INITIAL_MATERIALS, 
+  INITIAL_ASSIGNMENTS, 
+  INITIAL_GRADES 
+} from '../data/mockData';
+import { db, isFirebaseConfigured } from '../firebase';
+import { doc, setDoc, getDoc, collection, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
+
+interface DbContextType {
+  classes: Class[];
+  subjects: Subject[];
+  teachers: Teacher[];
+  students: Student[];
+  materials: Material[];
+  assignments: Assignment[];
+  grades: Grade[];
+  adminPassword: string;
+  currentUser: SessionUser | null;
+  isLoading: boolean;
+  
+  // Auth actions
+  login: (username: string, password: string, role: 'ADMIN' | 'TEACHER' | 'STUDENT') => SessionUser;
+  logout: () => void;
+  updateAdminPassword: (newPassword: string) => void;
+  updateTeacherPassword: (nik: string, newPassword: string) => void;
+  updateStudentPassword: (nis: string, newPassword: string) => void;
+
+  // Manage Classes
+  addClass: (name: string) => Class;
+  editClass: (id: string, name: string) => void;
+  deleteClass: (id: string) => void;
+
+  // Manage Subjects (Mapel)
+  addSubject: (name: string) => Subject;
+  editSubject: (id: string, name: string) => void;
+  deleteSubject: (id: string) => void;
+
+  // Manage Teachers (Guru)
+  addTeacher: (nik: string, name: string, subjectsTaught: any[], password?: string) => Teacher;
+  editTeacher: (id: string, name: string, subjectsTaught: any[], password?: string) => void;
+  deleteTeacher: (id: string) => void;
+
+  // Manage Students (Siswa)
+  addStudent: (nis: string, name: string, classId: string, password?: string) => Student;
+  editStudent: (id: string, name: string, classId: string, password?: string) => void;
+  deleteStudent: (id: string) => void;
+
+  // Materials (Materi)
+  addMaterial: (title: string, description: string, link: string, classId: string, subjectId: string, teacherId: string) => Material;
+  editMaterial: (id: string, title: string, description: string, link: string, classId: string, subjectId: string) => void;
+  deleteMaterial: (id: string) => void;
+
+  // Assignments (Tugas)
+  addAssignment: (title: string, description: string, dueDate: string, link: string, classId: string, subjectId: string, teacherId: string, formEnabled: boolean, previewEnabled?: boolean) => Assignment;
+  editAssignment: (id: string, title: string, description: string, dueDate: string, link: string, classId: string, subjectId: string, formEnabled: boolean, previewEnabled?: boolean) => void;
+  deleteAssignment: (id: string) => void;
+
+  // Grading & Submissions (Nilai)
+  submitAssignment: (studentId: string, assignmentId: string, submissionLink: string, subjectId: string, classId: string) => Grade;
+  gradeAssignment: (gradeId: string, gradeValue: number, feedback: string) => void;
+  resetAssignmentValue: (gradeId: string) => void;
+}
+
+const DbContext = createContext<DbContextType | undefined>(undefined);
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    operationType,
+    path
+  };
+  console.error('Firestore Error Detailed: ', JSON.stringify(errInfo));
+  // Do not crash the UI, we throw error so caller can display it nice
+  throw new Error(JSON.stringify(errInfo));
+}
+
+export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [grades, setGrades] = useState<Grade[]>([]);
+  const [adminPassword, setAdminPassword] = useState<string>('admin123');
+  const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // Initial Load from LocalStorage
+  useEffect(() => {
+    try {
+      const storedClasses = localStorage.getItem('smp_classes');
+      const storedSubjects = localStorage.getItem('smp_subjects');
+      const storedTeachers = localStorage.getItem('smp_teachers');
+      const storedStudents = localStorage.getItem('smp_students');
+      const storedMaterials = localStorage.getItem('smp_materials');
+      const storedAssignments = localStorage.getItem('smp_assignments');
+      const storedGrades = localStorage.getItem('smp_grades');
+      const storedAdminPassword = localStorage.getItem('smp_admin_pwd');
+      const storedUser = localStorage.getItem('smp_current_user');
+
+      if (storedClasses) setClasses(JSON.parse(storedClasses));
+      else {
+        setClasses(INITIAL_CLASSES);
+        localStorage.setItem('smp_classes', JSON.stringify(INITIAL_CLASSES));
+      }
+
+      if (storedSubjects) setSubjects(JSON.parse(storedSubjects));
+      else {
+        setSubjects(INITIAL_SUBJECTS);
+        localStorage.setItem('smp_subjects', JSON.stringify(INITIAL_SUBJECTS));
+      }
+
+      if (storedTeachers) setTeachers(JSON.parse(storedTeachers));
+      else {
+        setTeachers(INITIAL_TEACHERS);
+        localStorage.setItem('smp_teachers', JSON.stringify(INITIAL_TEACHERS));
+      }
+
+      if (storedStudents) setStudents(JSON.parse(storedStudents));
+      else {
+        setStudents(INITIAL_STUDENTS);
+        localStorage.setItem('smp_students', JSON.stringify(INITIAL_STUDENTS));
+      }
+
+      if (storedMaterials) setMaterials(JSON.parse(storedMaterials));
+      else {
+        setMaterials(INITIAL_MATERIALS);
+        localStorage.setItem('smp_materials', JSON.stringify(INITIAL_MATERIALS));
+      }
+
+      if (storedAssignments) setAssignments(JSON.parse(storedAssignments));
+      else {
+        setAssignments(INITIAL_ASSIGNMENTS);
+        localStorage.setItem('smp_assignments', JSON.stringify(INITIAL_ASSIGNMENTS));
+      }
+
+      if (storedGrades) setGrades(JSON.parse(storedGrades));
+      else {
+        setGrades(INITIAL_GRADES);
+        localStorage.setItem('smp_grades', JSON.stringify(INITIAL_GRADES));
+      }
+
+      if (storedAdminPassword) {
+        setAdminPassword(storedAdminPassword);
+      } else {
+        localStorage.setItem('smp_admin_pwd', 'admin123');
+      }
+
+      if (storedUser) {
+        setCurrentUser(JSON.parse(storedUser));
+      }
+    } catch (e) {
+      console.error("Error loading SMP e-learning data: ", e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Sync state functions helper
+  const syncState = (
+    key: string, 
+    data: any, 
+    firebaseCollection?: string, 
+    docId?: string
+  ) => {
+    localStorage.setItem(key, JSON.stringify(data));
+    
+    // Sync to Firestore if configured
+    if (isFirebaseConfigured && db && firebaseCollection && docId) {
+      const docRef = doc(db, firebaseCollection, docId);
+      
+      let docData = data;
+      if (Array.isArray(data)) {
+        // Find the specific item matching docId in the collection array
+        const item = data.find((x: any) => x && (x.id === docId || x.nis === docId || x.nik === docId));
+        if (item) {
+          docData = { ...item };
+        } else {
+          console.warn(`Could not find item with ID ${docId} in array for collection ${firebaseCollection}`);
+          return;
+        }
+      }
+
+      setDoc(docRef, docData, { merge: true })
+        .catch(err => {
+          console.warn(`Firestore sync failed for ${firebaseCollection}/${docId}: `, err);
+          handleFirestoreError(err, OperationType.WRITE, `${firebaseCollection}/${docId}`);
+        });
+    }
+  };
+
+  // Auth Operations
+  const login = (username: string, password: string, role: 'ADMIN' | 'TEACHER' | 'STUDENT') => {
+    if (role === 'ADMIN') {
+      if (username.toLowerCase() === 'admin' && password === adminPassword) {
+        const user: SessionUser = { id: 'admin', name: 'Administrator', role: 'ADMIN' };
+        setCurrentUser(user);
+        localStorage.setItem('smp_current_user', JSON.stringify(user));
+        return user;
+      }
+      throw new Error('Username Admin salah atau Password salah.');
+    }
+
+    if (role === 'TEACHER') {
+      const teacher = teachers.find(t => t.nik === username);
+      if (teacher && teacher.password === password) {
+        const user: SessionUser = { id: teacher.id, name: teacher.name, role: 'TEACHER', meta: { nik: teacher.nik } };
+        setCurrentUser(user);
+        localStorage.setItem('smp_current_user', JSON.stringify(user));
+        return user;
+      }
+      throw new Error('NIK atau Password Guru salah.');
+    }
+
+    if (role === 'STUDENT') {
+      const student = students.find(s => s.nis === username);
+      if (student && student.password === password) {
+        const user: SessionUser = { id: student.id, name: student.name, role: 'STUDENT', meta: { nis: student.nis, classId: student.classId } };
+        setCurrentUser(user);
+        localStorage.setItem('smp_current_user', JSON.stringify(user));
+        return user;
+      }
+      throw new Error('NIS atau Password Siswa salah.');
+    }
+
+    throw new Error('Peran login tidak valid.');
+  };
+
+  const logout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('smp_current_user');
+  };
+
+  const updateAdminPassword = (newPassword: string) => {
+    setAdminPassword(newPassword);
+    localStorage.setItem('smp_admin_pwd', newPassword);
+    
+    // Full backup trigger
+    if (isFirebaseConfigured && db) {
+      setDoc(doc(db, 'adminConfigs', 'config'), { adminPassword: newPassword })
+        .catch(err => handleFirestoreError(err, OperationType.WRITE, 'adminConfigs/config'));
+    }
+  };
+
+  const updateTeacherPassword = (nik: string, newPassword: string) => {
+    const updated = teachers.map(t => {
+      if (t.nik === nik) {
+        return { ...t, password: newPassword };
+      }
+      return t;
+    });
+    setTeachers(updated);
+    syncState('smp_teachers', updated, 'teachers', nik);
+  };
+
+  const updateStudentPassword = (nis: string, newPassword: string) => {
+    const updated = students.map(s => {
+      if (s.nis === nis) {
+        return { ...s, password: newPassword };
+      }
+      return s;
+    });
+    setStudents(updated);
+    syncState('smp_students', updated, 'students', nis);
+  };
+
+  // Manage Classes
+  const addClass = (name: string) => {
+    const newClass: Class = {
+      id: name.trim().toUpperCase().replace(/\s+/g, '_'),
+      name: name.trim()
+    };
+    const updated = [...classes, newClass];
+    setClasses(updated);
+    syncState('smp_classes', updated, 'classes', newClass.id);
+    return newClass;
+  };
+
+  const editClass = (id: string, name: string) => {
+    const updated = classes.map(c => c.id === id ? { ...c, name: name.trim() } : c);
+    setClasses(updated);
+    syncState('smp_classes', updated, 'classes', id);
+  };
+
+  const deleteClass = (id: string) => {
+    const updated = classes.filter(c => c.id !== id);
+    setClasses(updated);
+    localStorage.setItem('smp_classes', JSON.stringify(updated));
+    if (isFirebaseConfigured && db) {
+       deleteDoc(doc(db, 'classes', id))
+         .catch(err => handleFirestoreError(err, OperationType.DELETE, `classes/${id}`));
+    }
+  };
+
+  // Manage Subjects
+  const addSubject = (name: string) => {
+    const newSub: Subject = {
+      id: "MAPEL_" + Math.random().toString(36).substr(2, 6).toUpperCase(),
+      name: name.trim()
+    };
+    const updated = [...subjects, newSub];
+    setSubjects(updated);
+    syncState('smp_subjects', updated, 'subjects', newSub.id);
+    return newSub;
+  };
+
+  const editSubject = (id: string, name: string) => {
+    const updated = subjects.map(s => s.id === id ? { ...s, name: name.trim() } : s);
+    setSubjects(updated);
+    syncState('smp_subjects', updated, 'subjects', id);
+  };
+
+  const deleteSubject = (id: string) => {
+    const updated = subjects.filter(s => s.id !== id);
+    setSubjects(updated);
+    localStorage.setItem('smp_subjects', JSON.stringify(updated));
+    if (isFirebaseConfigured && db) {
+       deleteDoc(doc(db, 'subjects', id))
+         .catch(err => handleFirestoreError(err, OperationType.DELETE, `subjects/${id}`));
+    }
+  };
+
+  // Manage Teachers
+  const addTeacher = (nik: string, name: string, subjectsTaught: any[], password?: string) => {
+    const newTeacher: Teacher = {
+      id: nik.trim(),
+      nik: nik.trim(),
+      name: name.trim(),
+      password: password && password.trim() ? password.trim() : nik.trim(),
+      subjectsTaught
+    };
+    const updated = [...teachers, newTeacher];
+    setTeachers(updated);
+    syncState('smp_teachers', updated, 'teachers', newTeacher.id);
+    return newTeacher;
+  };
+
+  const editTeacher = (id: string, name: string, subjectsTaught: any[], password?: string) => {
+    const updated = teachers.map(t => {
+      if (t.id === id) {
+        return { 
+          ...t, 
+          name: name.trim(), 
+          subjectsTaught,
+          password: password && password.trim() ? password.trim() : t.password
+        };
+      }
+      return t;
+    });
+    setTeachers(updated);
+    syncState('smp_teachers', updated, 'teachers', id);
+  };
+
+  const deleteTeacher = (id: string) => {
+    const updated = teachers.filter(t => t.id !== id);
+    setTeachers(updated);
+    localStorage.setItem('smp_teachers', JSON.stringify(updated));
+    if (isFirebaseConfigured && db) {
+       deleteDoc(doc(db, 'teachers', id))
+         .catch(err => handleFirestoreError(err, OperationType.DELETE, `teachers/${id}`));
+    }
+  };
+
+  // Manage Students
+  const addStudent = (nis: string, name: string, classId: string, password?: string) => {
+    const newStudent: Student = {
+      id: nis.trim(),
+      nis: nis.trim(),
+      name: name.trim(),
+      classId,
+      password: password && password.trim() ? password.trim() : nis.trim()
+    };
+    const updated = [...students, newStudent];
+    setStudents(updated);
+    syncState('smp_students', updated, 'students', newStudent.id);
+    return newStudent;
+  };
+
+  const editStudent = (id: string, name: string, classId: string, password?: string) => {
+    const updated = students.map(s => {
+      if (s.id === id) {
+        return { 
+          ...s, 
+          name: name.trim(), 
+          classId,
+          password: password && password.trim() ? password.trim() : s.password
+        };
+      }
+      return s;
+    });
+    setStudents(updated);
+    syncState('smp_students', updated, 'students', id);
+  };
+
+  const deleteStudent = (id: string) => {
+    const updated = students.filter(s => s.id !== id);
+    setStudents(updated);
+    localStorage.setItem('smp_students', JSON.stringify(updated));
+    if (isFirebaseConfigured && db) {
+       deleteDoc(doc(db, 'students', id))
+         .catch(err => handleFirestoreError(err, OperationType.DELETE, `students/${id}`));
+    }
+  };
+
+  // Materials CRUD
+  const addMaterial = (
+    title: string, 
+    description: string, 
+    link: string, 
+    classId: string, 
+    subjectId: string, 
+    teacherId: string
+  ) => {
+    const newMat: Material = {
+      id: "MAT_" + Math.random().toString(36).substr(2, 9),
+      title: title.trim(),
+      description: description.trim(),
+      link: link.trim(),
+      classId,
+      subjectId,
+      teacherId,
+      createdAt: new Date().toISOString()
+    };
+    const updated = [...materials, newMat];
+    setMaterials(updated);
+    syncState('smp_materials', updated, 'materials', newMat.id);
+    return newMat;
+  };
+
+  const editMaterial = (
+    id: string, 
+    title: string, 
+    description: string, 
+    link: string, 
+    classId: string, 
+    subjectId: string
+  ) => {
+    const updated = materials.map(m => {
+      if (m.id === id) {
+        return { 
+          ...m, 
+          title: title.trim(), 
+          description: description.trim(), 
+          link: link.trim(), 
+          classId, 
+          subjectId 
+        };
+      }
+      return m;
+    });
+    setMaterials(updated);
+    syncState('smp_materials', updated, 'materials', id);
+  };
+
+  const deleteMaterial = (id: string) => {
+    const updated = materials.filter(m => m.id !== id);
+    setMaterials(updated);
+    localStorage.setItem('smp_materials', JSON.stringify(updated));
+    if (isFirebaseConfigured && db) {
+       deleteDoc(doc(db, 'materials', id))
+         .catch(err => handleFirestoreError(err, OperationType.DELETE, `materials/${id}`));
+    }
+  };
+
+  // Assignments CRUD
+  const addAssignment = (
+    title: string, 
+    description: string, 
+    dueDate: string, 
+    link: string, 
+    classId: string, 
+    subjectId: string, 
+    teacherId: string, 
+    formEnabled: boolean,
+    previewEnabled?: boolean
+  ) => {
+    const newAsg: Assignment = {
+      id: "ASG_" + Math.random().toString(36).substr(2, 9),
+      title: title.trim(),
+      description: description.trim(),
+      dueDate,
+      link: link.trim(),
+      classId,
+      subjectId,
+      teacherId,
+      formEnabled,
+      previewEnabled: previewEnabled ?? true,
+      createdAt: new Date().toISOString()
+    };
+    const updated = [...assignments, newAsg];
+    setAssignments(updated);
+    syncState('smp_assignments', updated, 'assignments', newAsg.id);
+    return newAsg;
+  };
+
+  const editAssignment = (
+    id: string, 
+    title: string, 
+    description: string, 
+    dueDate: string, 
+    link: string, 
+    classId: string, 
+    subjectId: string, 
+    formEnabled: boolean,
+    previewEnabled?: boolean
+  ) => {
+    const updated = assignments.map(a => {
+      if (a.id === id) {
+        return { 
+          ...a, 
+          title: title.trim(), 
+          description: description.trim(), 
+          dueDate, 
+          link: link.trim(), 
+          classId, 
+          subjectId,
+          formEnabled,
+          previewEnabled: previewEnabled ?? true
+        };
+      }
+      return a;
+    });
+    setAssignments(updated);
+    syncState('smp_assignments', updated, 'assignments', id);
+  };
+
+  const deleteAssignment = (id: string) => {
+    const updated = assignments.filter(a => a.id !== id);
+    setAssignments(updated);
+    
+    // Also remove respective grades for cleaner DB
+    const updatedGrades = grades.filter(g => g.assignmentId !== id);
+    setGrades(updatedGrades);
+
+    localStorage.setItem('smp_assignments', JSON.stringify(updated));
+    localStorage.setItem('smp_grades', JSON.stringify(updatedGrades));
+
+    if (isFirebaseConfigured && db) {
+       deleteDoc(doc(db, 'assignments', id))
+         .catch(err => handleFirestoreError(err, OperationType.DELETE, `assignments/${id}`));
+    }
+  };
+
+  // Student Actions: Submission of assignments
+  const submitAssignment = (
+    studentId: string, 
+    assignmentId: string, 
+    submissionLink: string, 
+    subjectId: string, 
+    classId: string
+  ) => {
+    const existingIndex = grades.findIndex(g => g.studentId === studentId && g.assignmentId === assignmentId);
+    
+    const submittedGrade: Grade = {
+      id: existingIndex >= 0 ? grades[existingIndex].id : `GRAD_${studentId}_${assignmentId}`,
+      studentId,
+      assignmentId,
+      subjectId,
+      classId,
+      grade: undefined,
+      feedback: undefined,
+      submissionLink: submissionLink.trim(),
+      status: 'SUBMITTED',
+      submittedAt: new Date().toISOString()
+    };
+
+    let updated: Grade[];
+    if (existingIndex >= 0) {
+      updated = grades.map((g, idx) => idx === existingIndex ? submittedGrade : g);
+    } else {
+      updated = [...grades, submittedGrade];
+    }
+    
+    setGrades(updated);
+    syncState('smp_grades', updated, 'grades', submittedGrade.id);
+    return submittedGrade;
+  };
+
+  // Teacher Action: Grading & feedback
+  const gradeAssignment = (gradeId: string, gradeValue: number, feedback: string) => {
+    const updated = grades.map(g => {
+      if (g.id === gradeId) {
+        return {
+          ...g,
+          grade: gradeValue,
+          feedback: feedback.trim(),
+          status: 'GRADED' as const,
+          gradedAt: new Date().toISOString()
+        };
+      }
+      return g;
+    });
+    setGrades(updated);
+    syncState('smp_grades', updated, 'grades', gradeId);
+  };
+
+  // Teacher Action: Reset grade so student can submit / do again
+  const resetAssignmentValue = (gradeId: string) => {
+    const updated = grades.map(g => {
+      if (g.id === gradeId) {
+        return {
+          ...g,
+          grade: undefined,
+          feedback: undefined,
+          submissionLink: undefined,
+          status: 'RESET' as const,
+          submittedAt: undefined,
+          gradedAt: undefined
+        };
+      }
+      return g;
+    });
+    setGrades(updated);
+    syncState('smp_grades', updated, 'grades', gradeId);
+  };
+
+  return (
+    <DbContext.Provider value={{
+      classes,
+      subjects,
+      teachers,
+      students,
+      materials,
+      assignments,
+      grades,
+      adminPassword,
+      currentUser,
+      isLoading,
+      login,
+      logout,
+      updateAdminPassword,
+      updateTeacherPassword,
+      updateStudentPassword,
+      addClass,
+      editClass,
+      deleteClass,
+      addSubject,
+      editSubject,
+      deleteSubject,
+      addTeacher,
+      editTeacher,
+      deleteTeacher,
+      addStudent,
+      editStudent,
+      deleteStudent,
+      addMaterial,
+      editMaterial,
+      deleteMaterial,
+      addAssignment,
+      editAssignment,
+      deleteAssignment,
+      submitAssignment,
+      gradeAssignment,
+      resetAssignmentValue
+    }}>
+      {children}
+    </DbContext.Provider>
+  );
+};
+
+export const useDb = () => {
+  const context = useContext(DbContext);
+  if (context === undefined) {
+    throw new Error('useDb must be used within a DbProvider');
+  }
+  return context;
+};

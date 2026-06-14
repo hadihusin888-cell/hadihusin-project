@@ -1,0 +1,6 @@
+{
+  "name": "SMP Al Irsyad Surakarta E-Learning",
+  "description": "Sistem pembelajaran digital resmi untuk siswa, guru, dan admin SMP Al Irsyad Surakarta, dirancang secara minimalist, clean, dan responsif.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
