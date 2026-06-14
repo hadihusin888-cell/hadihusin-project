@@ -72,7 +72,7 @@ export default function LandingPage() {
         {/* Left column info */}
         <div id="hero-info" className="lg:col-span-6 space-y-6">
           <span className="bg-teal-50/80 text-teal-700 text-2xs font-mono font-bold uppercase tracking-widest px-3 py-1.5 rounded-full border border-teal-100/80">
-            ✦ Sistem E-Learning Resmi
+            ✦ Sistem E-Learning V 2.1
           </span>
           <h2 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight leading-[1.12]">
             Membentuk Generasi Beradab &amp; Unggul

@@ -29,7 +29,7 @@ export default function AdminPanel() {
     classes, addClass, editClass, deleteClass,
     subjects, addSubject, editSubject, deleteSubject,
     teachers, addTeacher, editTeacher, deleteTeacher,
-    students, addStudent, editStudent, deleteStudent,
+    students, addStudent, editStudent, deleteStudent, importStudentsBulk,
     adminPassword, updateAdminPassword,
     logout, currentUser 
   } = useDb();
@@ -329,36 +329,20 @@ export default function AdminPanel() {
     }
   };
 
-  const handleSaveBulkStudents = () => {
+  const handleSaveBulkStudents = async () => {
     if (bulkStudents.length === 0) return;
 
-    let addedCount = 0;
-    const localClassMap: Record<string, string> = {};
-
-    bulkStudents.forEach(item => {
-      let targetClassId = findClassIdByInput(item.classInput);
-      
-      if (!targetClassId) {
-        const normalizedClassName = item.classInput.trim();
-        const localMatchedId = localClassMap[normalizedClassName.toLowerCase()];
-        
-        if (localMatchedId) {
-          targetClassId = localMatchedId;
-        } else {
-          const createdClass = addClass(normalizedClassName);
-          targetClassId = createdClass.id;
-          localClassMap[normalizedClassName.toLowerCase()] = createdClass.id;
-        }
-      }
-
-      addStudent(item.nis, item.name, targetClassId, item.password);
-      addedCount++;
-    });
-
-    triggerToast(`${addedCount} siswa berhasil diunggah masal!`);
-    setIsBulkOpen(false);
-    setBulkStudents([]);
-    setBulkError(null);
+    try {
+      const result = await importStudentsBulk(bulkStudents);
+      triggerToast(`${result.addedStudents} siswa berhasil diunggah masal! (${result.addedClasses} rombel baru dibuat).`);
+    } catch (err) {
+      console.error(err);
+      triggerToast("Gagal mengimpor data siswa.");
+    } finally {
+      setIsBulkOpen(false);
+      setBulkStudents([]);
+      setBulkError(null);
+    }
   };
 
   // Change password admin

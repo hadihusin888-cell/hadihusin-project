@@ -60,6 +60,9 @@ interface DbContextType {
   addStudent: (nis: string, name: string, classId: string, password?: string) => Student;
   editStudent: (id: string, name: string, classId: string, password?: string) => void;
   deleteStudent: (id: string) => void;
+  importStudentsBulk: (
+    studentsToImport: Array<{ nis: string; name: string; classInput: string; password?: string }>
+  ) => Promise<{ addedStudents: number; addedClasses: number }>;
 
   // Materials (Materi)
   addMaterial: (title: string, description: string, link: string, classId: string, subjectId: string, teacherId: string) => Material;
@@ -402,6 +405,111 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     return newStudent;
   };
 
+  const importStudentsBulk = async (
+    studentsToImport: Array<{ nis: string; name: string; classInput: string; password?: string }>
+  ) => {
+    let currentClasses = [...classes];
+    let currentStudents = [...students];
+
+    const newClassesToCreate: Class[] = [];
+    const newStudentsToCreate: Student[] = [];
+
+    const findClassIdInternal = (clsInput: string, classList: Class[]) => {
+      if (!clsInput) return null;
+      const normalized = clsInput.trim().toLowerCase();
+      
+      // 1. Try raw ID match
+      let matchedClass = classList.find(c => c.id.toLowerCase() === normalized);
+      if (matchedClass) return matchedClass.id;
+
+      // 2. Try Name match
+      matchedClass = classList.find(c => c.name.toLowerCase() === normalized);
+      if (matchedClass) return matchedClass.id;
+
+      // 3. Try fallback
+      const stripped = normalized.replace(/[^a-z0-9]/g, '');
+      matchedClass = classList.find(c => {
+        const clsIdSt = c.id.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const clsNmSt = c.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return clsIdSt === stripped || clsNmSt === stripped;
+      });
+      if (matchedClass) return matchedClass.id;
+
+      return null;
+    };
+
+    studentsToImport.forEach(item => {
+      let targetClassId = findClassIdInternal(item.classInput, currentClasses);
+
+      if (!targetClassId) {
+        const normalizedClassName = item.classInput.trim();
+        const newClassId = normalizedClassName.toUpperCase().replace(/\s+/g, '_');
+        
+        const newClass: Class = {
+          id: newClassId,
+          name: normalizedClassName
+        };
+        currentClasses.push(newClass);
+        newClassesToCreate.push(newClass);
+        targetClassId = newClassId;
+      }
+
+      const nisTrimmed = item.nis.trim();
+      const isDuplicate = currentStudents.some(s => s.id === nisTrimmed || s.nis === nisTrimmed);
+      
+      if (!isDuplicate) {
+        const newStudent: Student = {
+          id: nisTrimmed,
+          nis: nisTrimmed,
+          name: item.name.trim(),
+          classId: targetClassId,
+          password: item.password && item.password.trim() ? item.password.trim() : nisTrimmed
+        };
+        currentStudents.push(newStudent);
+        newStudentsToCreate.push(newStudent);
+      }
+    });
+
+    if (newClassesToCreate.length > 0) {
+      setClasses(currentClasses);
+      localStorage.setItem('smp_classes', JSON.stringify(currentClasses));
+      
+      // Sync setiap kelas baru ke Firestore
+      if (isFirebaseConfigured && db) {
+        await Promise.all(
+          newClassesToCreate.map(async (cls) => {
+            const docRef = doc(db, 'classes', cls.id);
+            await setDoc(docRef, cls, { merge: true }).catch(err => {
+              console.warn(`Firestore sync failed for classes/${cls.id}: `, err);
+            });
+          })
+        );
+      }
+    }
+
+    if (newStudentsToCreate.length > 0) {
+      setStudents(currentStudents);
+      localStorage.setItem('smp_students', JSON.stringify(currentStudents));
+      
+      // Sync setiap siswa baru ke Firestore
+      if (isFirebaseConfigured && db) {
+        await Promise.all(
+          newStudentsToCreate.map(async (std) => {
+            const docRef = doc(db, 'students', std.id);
+            await setDoc(docRef, std, { merge: true }).catch(err => {
+              console.warn(`Firestore sync failed for students/${std.id}: `, err);
+            });
+          })
+        );
+      }
+    }
+
+    return {
+      addedStudents: newStudentsToCreate.length,
+      addedClasses: newClassesToCreate.length
+    };
+  };
+
   const editStudent = (id: string, name: string, classId: string, password?: string) => {
     const updated = students.map(s => {
       if (s.id === id) {
@@ -669,6 +777,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       addStudent,
       editStudent,
       deleteStudent,
+      importStudentsBulk,
       addMaterial,
       editMaterial,
       deleteMaterial,
