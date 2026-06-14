@@ -185,6 +185,24 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     }
   }, []);
 
+  // Helper to remove any 'undefined' property values recursively before writing to Firestore
+  const sanitizeFirestoreData = (obj: any): any => {
+    if (obj === null || obj === undefined) return null;
+    if (Array.isArray(obj)) {
+      return obj.map(sanitizeFirestoreData);
+    }
+    if (typeof obj === 'object') {
+      const res: any = {};
+      for (const key of Object.keys(obj)) {
+        if (obj[key] !== undefined) {
+          res[key] = sanitizeFirestoreData(obj[key]);
+        }
+      }
+      return res;
+    }
+    return obj;
+  };
+
   // Sync state functions helper
   const syncState = (
     key: string, 
@@ -210,7 +228,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         }
       }
 
-      setDoc(docRef, docData, { merge: true })
+      setDoc(docRef, sanitizeFirestoreData(docData), { merge: true })
         .catch(err => {
           console.warn(`Firestore sync failed for ${firebaseCollection}/${docId}: `, err);
           handleFirestoreError(err, OperationType.WRITE, `${firebaseCollection}/${docId}`);

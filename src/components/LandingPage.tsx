@@ -277,9 +277,6 @@ export default function LandingPage() {
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
-                    <p className="text-[10px] text-slate-400 mt-1.5 font-medium">
-                      {role === 'ADMIN' ? 'Bawaan: admin123' : `Bawaan: sama dengan ${role === 'TEACHER' ? 'NIK' : 'NIS'}`}
-                    </p>
                   </div>
 
                   <button
@@ -290,37 +287,6 @@ export default function LandingPage() {
                     <Lock className="w-4 h-4" /> Masuk Portal
                   </button>
                 </form>
-
-                {/* Demonstration shortcuts */}
-                <div id="login-helper" className="border-t border-slate-150 mt-6 pt-5">
-                  <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide mb-2.5">Akses Demo / Uji Coba Cepat:</p>
-                  <div className="grid grid-cols-1 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => triggerFill('202401', '202401', 'STUDENT')}
-                      className="text-left text-xs bg-slate-50 hover:bg-teal-50 border border-slate-100 hover:border-teal-100/80 p-2 text-slate-600 hover:text-teal-700 cursor-pointer transition-all rounded-lg flex items-center justify-between"
-                    >
-                      <span className="font-semibold">Siswa: <b>Muhammad Ali</b> (7A)</span>
-                      <span className="font-mono text-[10px] bg-white border border-slate-200/50 px-1.5 py-0.5 rounded text-slate-500 font-bold">NIS: 202401</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => triggerFill('19830512', '19830512', 'TEACHER')}
-                      className="text-left text-xs bg-slate-50 hover:bg-teal-50 border border-slate-100 hover:border-teal-100/80 p-2 text-slate-600 hover:text-teal-700 cursor-pointer transition-all rounded-lg flex items-center justify-between"
-                    >
-                      <span className="font-semibold">Guru: <b>Ustadzah Fatimah</b></span>
-                      <span className="font-mono text-[10px] bg-white border border-slate-200/50 px-1.5 py-0.5 rounded text-slate-500 font-bold">NIK: 19830512</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => triggerFill('admin', 'admin123', 'ADMIN')}
-                      className="text-left text-xs bg-slate-50 hover:bg-teal-50 border border-slate-100 hover:border-teal-100/80 p-2 text-slate-600 hover:text-teal-700 cursor-pointer transition-all rounded-lg flex items-center justify-between"
-                    >
-                      <span className="font-semibold">Admin Utama</span>
-                      <span className="font-mono text-[10px] bg-white border border-slate-200/50 px-1.5 py-0.5 rounded text-slate-500 font-bold">admin123</span>
-                    </button>
-                  </div>
-                </div>
               </div>
             </motion.div>
           </div>

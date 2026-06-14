@@ -119,6 +119,10 @@ export default function StudentPanel() {
   const studentMaterials = materials.filter(m => m.classId === studentClassId);
   const studentAssignments = assignments.filter(a => a.classId === studentClassId);
   
+  // Check if current active assignment modal has a submission
+  const modalStudentGrade = activeAsgDetail ? grades.find(g => g.studentId === currentUser?.id && g.assignmentId === activeAsgDetail.id) : null;
+  const isModalSubmitted = !!(modalStudentGrade && (modalStudentGrade.status === 'SUBMITTED' || modalStudentGrade.status === 'GRADED'));
+  
   // Dynamic filter for Grades Tab
   const filteredGradeAssignments = selectedGradeMapelFilter
     ? studentAssignments.filter(a => a.subjectId === selectedGradeMapelFilter)
@@ -819,7 +823,7 @@ export default function StudentPanel() {
 
                 <div>
                   <label className="block text-[9px] font-black text-teal-700 uppercase tracking-widest mb-1">Instruksi Pengerjaan:</label>
-                  <p className="bg-teal-50/50 p-3.5 rounded-xl border border-teal-100 leading-relaxed text-[11px] text-slate-900 font-semibold">
+                  <p className="bg-teal-50/50 p-3.5 rounded-xl border border-teal-100 leading-relaxed text-[11px] text-slate-900 font-semibold whitespace-pre-wrap">
                     {activeAsgDetail.description}
                   </p>
                 </div>
@@ -911,7 +915,51 @@ export default function StudentPanel() {
                 })()}
 
                 {/* Form enabled submission link */}
-                {activeAsgDetail.formEnabled ? (
+                {isModalSubmitted ? (
+                  <div className="border-t border-slate-100 pt-5 space-y-4">
+                    <div className="bg-green-50 border border-green-200 p-4 rounded-xl flex items-start gap-2.5">
+                      <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
+                      <div>
+                        <h4 className="font-extrabold text-green-950 text-xs text-left mb-1">
+                          Tugas Telah Berhasil Dikumpulkan
+                        </h4>
+                        <p className="text-[11px] text-green-700 leading-relaxed text-left">
+                          Anda telah menyelesaikan tugas ini pada tanggal: <strong>{modalStudentGrade?.submittedAt ? new Date(modalStudentGrade.submittedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' WIB' : '-'}</strong>.
+                        </p>
+                      </div>
+                    </div>
+
+                    {activeAsgDetail.formEnabled && (
+                      <div className="space-y-1.5 text-left">
+                        <label className="block text-2xs font-extrabold text-slate-400 uppercase tracking-widest">
+                          Tautan Laporan Tugas Terdaftar (Terkunci):
+                        </label>
+                        <div className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-[11px] text-slate-650">
+                          <span className="truncate flex-1">{modalStudentGrade?.submissionLink || '-'}</span>
+                          {modalStudentGrade?.submissionLink && modalStudentGrade.submissionLink !== 'Form submission not required' && (
+                            <a
+                              href={modalStudentGrade.submissionLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-teal-700 hover:text-teal-800 font-extrabold shrink-0 inline-flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-md border border-slate-200 shadow-3xs hover:shadow-2xs transition"
+                            >
+                              Buka Tautan <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Disabled Send Button */}
+                    <button
+                      type="button"
+                      disabled
+                      className="w-full bg-slate-100 text-slate-400 border border-slate-200 font-bold py-3.5 rounded-xl flex items-center justify-center gap-1.5 cursor-not-allowed text-xs transition"
+                    >
+                      <CheckCircle2 className="w-4 h-4 text-slate-400" /> Pengiriman Jawaban Nonaktif (Telah Selesai)
+                    </button>
+                  </div>
+                ) : activeAsgDetail.formEnabled ? (
                   <form onSubmit={handleSubmitWork} className="border-t border-slate-100 pt-4 space-y-3">
                     <div>
                       <div className="flex items-center gap-1.5 mb-1.5 text-left relative">
@@ -1004,7 +1052,7 @@ export default function StudentPanel() {
               <div className="p-6 text-slate-700 text-xs text-left space-y-4 overflow-y-auto flex-1">
                 <div>
                   <h5 className="text-[9px] font-black text-teal-800 uppercase tracking-widest mb-1">Deskripsi dan Petunjuk Belajar</h5>
-                  <p className="bg-teal-50/50 p-4 rounded-xl border border-teal-150 leading-relaxed text-[11px] text-slate-900 font-semibold font-sans">
+                  <p className="bg-teal-50/50 p-4 rounded-xl border border-teal-150 leading-relaxed text-[11px] text-slate-900 font-semibold font-sans whitespace-pre-wrap">
                     {activeMaterialDetail.description || 'Silakan pelajari materi berikut ini.'}
                   </p>
                 </div>
