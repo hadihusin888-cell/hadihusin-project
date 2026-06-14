@@ -50,7 +50,7 @@ export default function LandingPage() {
             />
             <div>
               <h1 className="font-extrabold text-slate-900 text-base md:text-lg tracking-tight leading-tight">SMP AL ISRYAD</h1>
-              <p className="text-[10px] text-slate-400 font-mono tracking-widest mt-0.5 font-semibold">SURAKARTA</p>
+              <p className="text-[14px] text-slate-400 font-mono tracking-widest mt-0.5 font-semibold">SURAKARTA</p>
             </div>
           </div>
 
