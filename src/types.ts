@@ -74,5 +74,6 @@ export interface SessionUser {
   id: string; // NIK or NIS or 'admin'
   name: string;
   role: UserRole;
+  loginAt?: number; // Timestamp of when the user logged in
   meta?: any; // Extra meta properties (like Class room reference for students)
 }

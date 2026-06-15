@@ -159,11 +159,58 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     if (storedAssignments) setAssignments(JSON.parse(storedAssignments));
     if (storedGrades) setGrades(JSON.parse(storedGrades));
     if (storedAdminPassword) setAdminPassword(storedAdminPassword);
-    if (storedUser) setCurrentUser(JSON.parse(storedUser));
+    if (storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        if (parsedUser && (parsedUser.role === 'TEACHER' || parsedUser.role === 'STUDENT')) {
+          if (parsedUser.loginAt) {
+            const elapsed = Date.now() - parsedUser.loginAt;
+            // 1 hour = 3600000 ms
+            if (elapsed > 3600000) {
+              localStorage.removeItem('smp_current_user');
+              setCurrentUser(null);
+            } else {
+              setCurrentUser(parsedUser);
+            }
+          } else {
+            // If logged in under the previous build and doesn't have a loginAt, default it to now
+            parsedUser.loginAt = Date.now();
+            localStorage.setItem('smp_current_user', JSON.stringify(parsedUser));
+            setCurrentUser(parsedUser);
+          }
+        } else {
+          setCurrentUser(parsedUser);
+        }
+      } catch (e) {
+        console.error("Gagal membaca data login pengguna:", e);
+        localStorage.removeItem('smp_current_user');
+        setCurrentUser(null);
+      }
+    }
     
     // Set loading to false once cache is fully loaded to prevent stalling on login
     setIsLoading(false);
   }, []);
+
+  // Automatic logout timer for TEACHER and STUDENT accounts (> 1 hour)
+  useEffect(() => {
+    if (!currentUser || (currentUser.role !== 'TEACHER' && currentUser.role !== 'STUDENT')) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      if (currentUser.loginAt) {
+        const elapsed = Date.now() - currentUser.loginAt;
+        const ONE_HOUR = 3600000; // 1 hour in ms
+        if (elapsed > ONE_HOUR) {
+          console.warn("Sesi pengguna berakhir otomatis (melebihi 1 jam).");
+          logout();
+        }
+      }
+    }, 15000); // Check every 15 seconds
+
+    return () => clearInterval(intervalId);
+  }, [currentUser]);
 
   // Set up Firebase Real-Time Synchronization Listeners
   useEffect(() => {
@@ -549,6 +596,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           id: teacher.id, 
           name: teacher.name, 
           role: 'TEACHER', 
+          loginAt: Date.now(),
           meta: { nik: teacher.nik, classIds } 
         };
         setCurrentUser(user);
@@ -576,6 +624,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           id: student.id, 
           name: student.name, 
           role: 'STUDENT', 
+          loginAt: Date.now(),
           meta: { nis: student.nis, classId: student.classId } 
         };
         setCurrentUser(user);
