@@ -202,16 +202,9 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 setClasses(fsClasses);
                 localStorage.setItem('smp_classes', JSON.stringify(fsClasses));
               } else {
-                if (isFirstRun) {
-                  console.log("Firestore 'classes' collection is empty. Seeding initial data...");
-                  for (const cl of loadedClasses) {
-                    await setDoc(doc(db, 'classes', cl.id), sanitizeFirestoreData(cl));
-                  }
-                } else {
-                  loadedClasses = [];
-                  setClasses([]);
-                  localStorage.setItem('smp_classes', JSON.stringify([]));
-                }
+                loadedClasses = [];
+                setClasses([]);
+                localStorage.setItem('smp_classes', JSON.stringify([]));
               }
               isFirstRun = false;
             }, (err) => {
@@ -236,16 +229,9 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 setSubjects(fsSubjects);
                 localStorage.setItem('smp_subjects', JSON.stringify(fsSubjects));
               } else {
-                if (isFirstRun) {
-                  console.log("Firestore 'subjects' collection is empty. Seeding initial data...");
-                  for (const sb of loadedSubjects) {
-                    await setDoc(doc(db, 'subjects', sb.id), sanitizeFirestoreData(sb));
-                  }
-                } else {
-                  loadedSubjects = [];
-                  setSubjects([]);
-                  localStorage.setItem('smp_subjects', JSON.stringify([]));
-                }
+                loadedSubjects = [];
+                setSubjects([]);
+                localStorage.setItem('smp_subjects', JSON.stringify([]));
               }
               isFirstRun = false;
             }, (err) => {
@@ -383,15 +369,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 setMaterials(fsMaterials);
                 localStorage.setItem('smp_materials', JSON.stringify(fsMaterials));
               } else {
-                if (isFirstRun) {
-                  console.log("Firestore 'materials' collection is empty. Seeding...");
-                  for (const mt of loadedMaterials) {
-                    await setDoc(doc(db, 'materials', mt.id), sanitizeFirestoreData(mt));
-                  }
-                } else {
-                  setMaterials([]);
-                  localStorage.setItem('smp_materials', JSON.stringify([]));
-                }
+                setMaterials([]);
+                localStorage.setItem('smp_materials', JSON.stringify([]));
               }
               isFirstRun = false;
             }, (err) => {
@@ -424,15 +403,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 setAssignments(fsAssignments);
                 localStorage.setItem('smp_assignments', JSON.stringify(fsAssignments));
               } else {
-                if (isFirstRun) {
-                  console.log("Firestore 'assignments' collection is empty. Seeding...");
-                  for (const as of loadedAssignments) {
-                    await setDoc(doc(db, 'assignments', as.id), sanitizeFirestoreData(as));
-                  }
-                } else {
-                  setAssignments([]);
-                  localStorage.setItem('smp_assignments', JSON.stringify([]));
-                }
+                setAssignments([]);
+                localStorage.setItem('smp_assignments', JSON.stringify([]));
               }
               isFirstRun = false;
             }, (err) => {
@@ -465,15 +437,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 setGrades(fsGrades);
                 localStorage.setItem('smp_grades', JSON.stringify(fsGrades));
               } else {
-                if (isFirstRun) {
-                  console.log("Firestore 'grades' collection is empty. Seeding...");
-                  for (const gr of loadedGrades) {
-                    await setDoc(doc(db, 'grades', gr.id), sanitizeFirestoreData(gr));
-                  }
-                } else {
-                  setGrades([]);
-                  localStorage.setItem('smp_grades', JSON.stringify([]));
-                }
+                setGrades([]);
+                localStorage.setItem('smp_grades', JSON.stringify([]));
               }
               isFirstRun = false;
             }, (err) => {
