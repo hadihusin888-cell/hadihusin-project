@@ -1,10 +1,10 @@
 {
-  "projectId": "advance-pillar-4tgzl",
-  "appId": "1:104010285329:web:57c1fd42b6f4b1add68cb0",
-  "apiKey": "AIzaSyARbQm9RG1AUGSqTzVGnU9155jO1l7Illg",
-  "authDomain": "advance-pillar-4tgzl.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-162d540a-5a5a-4bbc-ba5d-e79e37fd1418",
-  "storageBucket": "advance-pillar-4tgzl.firebasestorage.app",
-  "messagingSenderId": "104010285329",
-  "measurementId": ""
+  "projectId": "e-learning-alirsyad",
+  "appId": "1:549738525520:web:a4bce85afb2239ad89f255",
+  "apiKey": "AIzaSyAUAtmze7UbKNWo_4alHKu9yey_VlUkepY",
+  "authDomain": "e-learning-alirsyad.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "e-learning-alirsyad.firebasestorage.app",
+  "messagingSenderId": "549738525520",
+  "measurementId": "G-QCXNVFRDV5"
 }

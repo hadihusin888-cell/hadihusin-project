@@ -27,7 +27,9 @@ let auth: any = null;
 if (isFirebaseConfigured) {
   try {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-    db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    db = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== "(default)"
+      ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+      : getFirestore(app);
     auth = getAuth(app);
     console.log("Firebase initialized successfully inside SMP Al Irsyad Surakarta E-Learning.");
   } catch (error) {
