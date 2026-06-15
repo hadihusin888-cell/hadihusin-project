@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useDb } from '../context/DbContext';
 import { Material, Assignment, Grade } from '../types';
-import SyncIndicator from './SyncIndicator';
 import { 
   LayoutDashboard, 
   BookOpen, 
@@ -404,9 +403,6 @@ export default function TeacherPanel() {
               {activeTab === 'nilai' && 'Penilaian & Riwayat Pengumpulan'}
               {activeTab === 'setting' && 'Seting & Keamanan Password'}
             </h2>
-          </div>
-          <div className="flex items-center sm:justify-end">
-            <SyncIndicator />
           </div>
         </div>
 

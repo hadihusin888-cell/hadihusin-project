@@ -18,7 +18,10 @@ import {
   setDoc, 
   deleteDoc, 
   onSnapshot, 
-  writeBatch 
+  writeBatch,
+  query,
+  where,
+  limit
 } from 'firebase/firestore';
 
 enum OperationType {
@@ -179,8 +182,12 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       }
     };
 
-    // 1. Classes onSnapshot
-    const unsubClasses = onSnapshot(collection(db, 'classes'), (snapshot) => {
+    // 1. Classes onSnapshot (Always active or with limit for fast reference)
+    const classesQuery = currentUser?.role === 'ADMIN' 
+      ? collection(db, 'classes') 
+      : query(collection(db, 'classes'), limit(50));
+
+    const unsubClasses = onSnapshot(classesQuery, (snapshot) => {
       const list: Class[] = [];
       snapshot.forEach(doc => {
         list.push({ id: doc.id, ...doc.data() } as Class);
@@ -194,8 +201,9 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     });
     unsubscribes.push(unsubClasses);
 
-    // 2. Subjects onSnapshot
-    const unsubSubjects = onSnapshot(collection(db, 'subjects'), (snapshot) => {
+    // 2. Subjects onSnapshot (Capped to optimized reads limit)
+    const subjectsQuery = query(collection(db, 'subjects'), limit(100));
+    const unsubSubjects = onSnapshot(subjectsQuery, (snapshot) => {
       const list: Subject[] = [];
       snapshot.forEach(doc => {
         list.push({ id: doc.id, ...doc.data() } as Subject);
@@ -209,8 +217,9 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     });
     unsubscribes.push(unsubSubjects);
 
-    // 3. Teachers onSnapshot
-    const unsubTeachers = onSnapshot(collection(db, 'teachers'), (snapshot) => {
+    // 3. Teachers onSnapshot (Capped to optimized limit)
+    const teachersQuery = query(collection(db, 'teachers'), limit(100));
+    const unsubTeachers = onSnapshot(teachersQuery, (snapshot) => {
       const list: Teacher[] = [];
       snapshot.forEach(doc => {
         list.push({ id: doc.id, ...doc.data() } as Teacher);
@@ -224,8 +233,28 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     });
     unsubscribes.push(unsubTeachers);
 
-    // 4. Students onSnapshot
-    const unsubStudents = onSnapshot(collection(db, 'students'), (snapshot) => {
+    // 4. Students onSnapshot (Optimized using Filters depending on who is logged in!)
+    let studentsQuery;
+    if (currentUser?.role === 'ADMIN') {
+      studentsQuery = collection(db, 'students');
+    } else if (currentUser?.role === 'STUDENT') {
+      // Students only need classmate peers! Extremely high cost savings!
+      const studentClassId = currentUser.meta?.classId || 'default';
+      studentsQuery = query(collection(db, 'students'), where('classId', '==', studentClassId));
+    } else if (currentUser?.role === 'TEACHER') {
+      // Get classes this teacher is assigned to from their metadata
+      const classIds = currentUser.meta?.classIds || [];
+      if (classIds.length > 0) {
+        studentsQuery = query(collection(db, 'students'), where('classId', 'in', classIds));
+      } else {
+        studentsQuery = query(collection(db, 'students'), limit(30));
+      }
+    } else {
+      // Download nothing if not logged in
+      studentsQuery = query(collection(db, 'students'), where('classId', '==', 'NOT_LOGGED_IN'));
+    }
+
+    const unsubStudents = onSnapshot(studentsQuery, (snapshot) => {
       const list: Student[] = [];
       snapshot.forEach(doc => {
         list.push({ id: doc.id, ...doc.data() } as Student);
@@ -239,8 +268,22 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     });
     unsubscribes.push(unsubStudents);
 
-    // 5. Materials onSnapshot
-    const unsubMaterials = onSnapshot(collection(db, 'materials'), (snapshot) => {
+    // 5. Materials onSnapshot (Optimized!)
+    let materialsQuery;
+    if (currentUser?.role === 'ADMIN') {
+      materialsQuery = query(collection(db, 'materials'), limit(200));
+    } else if (currentUser?.role === 'TEACHER') {
+      // Only download their own materials
+      materialsQuery = query(collection(db, 'materials'), where('teacherId', '==', currentUser.id));
+    } else if (currentUser?.role === 'STUDENT') {
+      // Only download materials for their class
+      const studentClassId = currentUser.meta?.classId || 'default';
+      materialsQuery = query(collection(db, 'materials'), where('classId', '==', studentClassId));
+    } else {
+      materialsQuery = query(collection(db, 'materials'), where('classId', '==', 'NOT_LOGGED_IN'));
+    }
+
+    const unsubMaterials = onSnapshot(materialsQuery, (snapshot) => {
       const list: Material[] = [];
       snapshot.forEach(doc => {
         list.push({ id: doc.id, ...doc.data() } as Material);
@@ -254,8 +297,22 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     });
     unsubscribes.push(unsubMaterials);
 
-    // 6. Assignments onSnapshot
-    const unsubAssignments = onSnapshot(collection(db, 'assignments'), (snapshot) => {
+    // 6. Assignments onSnapshot (Optimized!)
+    let assignmentsQuery;
+    if (currentUser?.role === 'ADMIN') {
+      assignmentsQuery = query(collection(db, 'assignments'), limit(200));
+    } else if (currentUser?.role === 'TEACHER') {
+      // Only download their own assignments
+      assignmentsQuery = query(collection(db, 'assignments'), where('teacherId', '==', currentUser.id));
+    } else if (currentUser?.role === 'STUDENT') {
+      // Only download assignments for their class
+      const studentClassId = currentUser.meta?.classId || 'default';
+      assignmentsQuery = query(collection(db, 'assignments'), where('classId', '==', studentClassId));
+    } else {
+      assignmentsQuery = query(collection(db, 'assignments'), where('classId', '==', 'NOT_LOGGED_IN'));
+    }
+
+    const unsubAssignments = onSnapshot(assignmentsQuery, (snapshot) => {
       const list: Assignment[] = [];
       snapshot.forEach(doc => {
         list.push({ id: doc.id, ...doc.data() } as Assignment);
@@ -269,8 +326,26 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     });
     unsubscribes.push(unsubAssignments);
 
-    // 7. Grades onSnapshot
-    const unsubGrades = onSnapshot(collection(db, 'grades'), (snapshot) => {
+    // 7. Grades onSnapshot (Optimized!)
+    let gradesQuery;
+    if (currentUser?.role === 'ADMIN') {
+      gradesQuery = query(collection(db, 'grades'), limit(500));
+    } else if (currentUser?.role === 'TEACHER') {
+      // Filter grades of classes they teach
+      const classIds = currentUser.meta?.classIds || [];
+      if (classIds.length > 0) {
+        gradesQuery = query(collection(db, 'grades'), where('classId', 'in', classIds));
+      } else {
+        gradesQuery = query(collection(db, 'grades'), limit(30));
+      }
+    } else if (currentUser?.role === 'STUDENT') {
+      // Students ONLY download their own grades/submissions! HUGE reduction in read operations.
+      gradesQuery = query(collection(db, 'grades'), where('studentId', '==', currentUser.id));
+    } else {
+      gradesQuery = query(collection(db, 'grades'), where('studentId', '==', 'NOT_LOGGED_IN'));
+    }
+
+    const unsubGrades = onSnapshot(gradesQuery, (snapshot) => {
       const list: Grade[] = [];
       snapshot.forEach(doc => {
         list.push({ id: doc.id, ...doc.data() } as Grade);
@@ -306,50 +381,122 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     return () => {
       unsubscribes.forEach(unsub => unsub());
     };
-  }, [db]);
+  }, [db, currentUser]);
 
   // Handle manual / focus refresh pulls to synchronize state securely
   const refreshData = async () => {
     if (!db) return;
     setIsSyncing(true);
     try {
-      const collectionsToLoad = ['classes', 'subjects', 'teachers', 'students', 'materials', 'assignments', 'grades'];
-      const responses = await Promise.all(collectionsToLoad.map(col => getDocs(collection(db, col))));
+      // Opt-in queries depending on user role
+      const classesQuery = currentUser?.role === 'ADMIN' 
+        ? collection(db, 'classes') 
+        : query(collection(db, 'classes'), limit(50));
+
+      const subjectsQuery = query(collection(db, 'subjects'), limit(100));
+      const teachersQuery = query(collection(db, 'teachers'), limit(100));
+
+      let studentsQuery;
+      if (currentUser?.role === 'ADMIN') {
+        studentsQuery = collection(db, 'students');
+      } else if (currentUser?.role === 'STUDENT') {
+        const studentClassId = currentUser.meta?.classId || 'default';
+        studentsQuery = query(collection(db, 'students'), where('classId', '==', studentClassId));
+      } else if (currentUser?.role === 'TEACHER') {
+        const classIds = currentUser.meta?.classIds || [];
+        if (classIds.length > 0) {
+          studentsQuery = query(collection(db, 'students'), where('classId', 'in', classIds));
+        } else {
+          studentsQuery = query(collection(db, 'students'), limit(30));
+        }
+      } else {
+        studentsQuery = query(collection(db, 'students'), where('classId', '==', 'NOT_LOGGED_IN'));
+      }
+
+      let materialsQuery;
+      if (currentUser?.role === 'ADMIN') {
+        materialsQuery = query(collection(db, 'materials'), limit(200));
+      } else if (currentUser?.role === 'TEACHER') {
+        materialsQuery = query(collection(db, 'materials'), where('teacherId', '==', currentUser.id));
+      } else if (currentUser?.role === 'STUDENT') {
+        const studentClassId = currentUser.meta?.classId || 'default';
+        materialsQuery = query(collection(db, 'materials'), where('classId', '==', studentClassId));
+      } else {
+        materialsQuery = query(collection(db, 'materials'), where('classId', '==', 'NOT_LOGGED_IN'));
+      }
+
+      let assignmentsQuery;
+      if (currentUser?.role === 'ADMIN') {
+        assignmentsQuery = query(collection(db, 'assignments'), limit(200));
+      } else if (currentUser?.role === 'TEACHER') {
+        assignmentsQuery = query(collection(db, 'assignments'), where('teacherId', '==', currentUser.id));
+      } else if (currentUser?.role === 'STUDENT') {
+        const studentClassId = currentUser.meta?.classId || 'default';
+        assignmentsQuery = query(collection(db, 'assignments'), where('classId', '==', studentClassId));
+      } else {
+        assignmentsQuery = query(collection(db, 'assignments'), where('classId', '==', 'NOT_LOGGED_IN'));
+      }
+
+      let gradesQuery;
+      if (currentUser?.role === 'ADMIN') {
+        gradesQuery = query(collection(db, 'grades'), limit(500));
+      } else if (currentUser?.role === 'TEACHER') {
+        const classIds = currentUser.meta?.classIds || [];
+        if (classIds.length > 0) {
+          gradesQuery = query(collection(db, 'grades'), where('classId', 'in', classIds));
+        } else {
+          gradesQuery = query(collection(db, 'grades'), limit(30));
+        }
+      } else if (currentUser?.role === 'STUDENT') {
+        gradesQuery = query(collection(db, 'grades'), where('studentId', '==', currentUser.id));
+      } else {
+        gradesQuery = query(collection(db, 'grades'), where('studentId', '==', 'NOT_LOGGED_IN'));
+      }
+
+      const responses = await Promise.all([
+        getDocs(classesQuery),
+        getDocs(subjectsQuery),
+        getDocs(teachersQuery),
+        getDocs(studentsQuery),
+        getDocs(materialsQuery),
+        getDocs(assignmentsQuery),
+        getDocs(gradesQuery),
+      ]);
       
       const [clsSnap, subSnap, tchSnap, stdSnap, matSnap, asgSnap, grdSnap] = responses;
 
       const clsList: Class[] = [];
-      clsSnap.forEach(doc => clsList.push({ id: doc.id, ...doc.data() } as Class));
+      clsSnap.forEach(doc => clsList.push({ id: doc.id, ...(doc.data() as any) } as Class));
       setClasses(clsList);
       localStorage.setItem('smp_classes', JSON.stringify(clsList));
 
       const subList: Subject[] = [];
-      subSnap.forEach(doc => subList.push({ id: doc.id, ...doc.data() } as Subject));
+      subSnap.forEach(doc => subList.push({ id: doc.id, ...(doc.data() as any) } as Subject));
       setSubjects(subList);
       localStorage.setItem('smp_subjects', JSON.stringify(subList));
 
       const tchList: Teacher[] = [];
-      tchSnap.forEach(doc => tchList.push({ id: doc.id, ...doc.data() } as Teacher));
+      tchSnap.forEach(doc => tchList.push({ id: doc.id, ...(doc.data() as any) } as Teacher));
       setTeachers(tchList);
       localStorage.setItem('smp_teachers', JSON.stringify(tchList));
 
       const stdList: Student[] = [];
-      stdSnap.forEach(doc => stdList.push({ id: doc.id, ...doc.data() } as Student));
+      stdSnap.forEach(doc => stdList.push({ id: doc.id, ...(doc.data() as any) } as Student));
       setStudents(stdList);
       localStorage.setItem('smp_students', JSON.stringify(stdList));
 
       const matList: Material[] = [];
-      matSnap.forEach(doc => matList.push({ id: doc.id, ...doc.data() } as Material));
+      matSnap.forEach(doc => matList.push({ id: doc.id, ...(doc.data() as any) } as Material));
       setMaterials(matList);
       localStorage.setItem('smp_materials', JSON.stringify(matList));
 
       const asgList: Assignment[] = [];
-      asgSnap.forEach(doc => asgList.push({ id: doc.id, ...doc.data() } as Assignment));
+      asgSnap.forEach(doc => asgList.push({ id: doc.id, ...(doc.data() as any) } as Assignment));
       setAssignments(asgList);
       localStorage.setItem('smp_assignments', JSON.stringify(asgList));
 
       const grdList: Grade[] = [];
-      grdSnap.forEach(doc => grdList.push({ id: doc.id, ...doc.data() } as Grade));
+      grdSnap.forEach(doc => grdList.push({ id: doc.id, ...(doc.data() as any) } as Grade));
       setGrades(grdList);
       localStorage.setItem('smp_grades', JSON.stringify(grdList));
 
@@ -381,9 +528,26 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     }
 
     if (role === 'TEACHER') {
-      const teacher = teachers.find(t => t.nik === username);
+      let teacher = teachers.find(t => t.nik === username);
+      if (!teacher && db) {
+        try {
+          const teacherDoc = await getDoc(doc(db, 'teachers', username));
+          if (teacherDoc.exists()) {
+            teacher = { id: teacherDoc.id, ...teacherDoc.data() } as Teacher;
+          }
+        } catch (err) {
+          console.warn("Direct Firestore teacher login fetch failed, trying loaded cache:", err);
+        }
+      }
+      
       if (teacher && teacher.password === password) {
-        const user: SessionUser = { id: teacher.id, name: teacher.name, role: 'TEACHER', meta: { nik: teacher.nik } };
+        const classIds = teacher.subjectsTaught?.map((s: any) => s.classId) || [];
+        const user: SessionUser = { 
+          id: teacher.id, 
+          name: teacher.name, 
+          role: 'TEACHER', 
+          meta: { nik: teacher.nik, classIds } 
+        };
         setCurrentUser(user);
         localStorage.setItem('smp_current_user', JSON.stringify(user));
         return user;
@@ -392,9 +556,25 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     }
 
     if (role === 'STUDENT') {
-      const student = students.find(s => s.nis === username);
+      let student = students.find(s => s.nis === username);
+      if (!student && db) {
+        try {
+          const studentDoc = await getDoc(doc(db, 'students', username));
+          if (studentDoc.exists()) {
+            student = { id: studentDoc.id, ...studentDoc.data() } as Student;
+          }
+        } catch (err) {
+          console.warn("Direct Firestore student login fetch failed, trying loaded cache:", err);
+        }
+      }
+
       if (student && student.password === password) {
-        const user: SessionUser = { id: student.id, name: student.name, role: 'STUDENT', meta: { nis: student.nis, classId: student.classId } };
+        const user: SessionUser = { 
+          id: student.id, 
+          name: student.name, 
+          role: 'STUDENT', 
+          meta: { nis: student.nis, classId: student.classId } 
+        };
         setCurrentUser(user);
         localStorage.setItem('smp_current_user', JSON.stringify(user));
         return user;
