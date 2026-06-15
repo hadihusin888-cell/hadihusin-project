@@ -201,10 +201,16 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 loadedClasses = fsClasses;
                 setClasses(fsClasses);
                 localStorage.setItem('smp_classes', JSON.stringify(fsClasses));
-              } else if (isFirstRun) {
-                console.log("Firestore 'classes' collection is empty. Seeding initial data...");
-                for (const cl of loadedClasses) {
-                  await setDoc(doc(db, 'classes', cl.id), sanitizeFirestoreData(cl));
+              } else {
+                if (isFirstRun) {
+                  console.log("Firestore 'classes' collection is empty. Seeding initial data...");
+                  for (const cl of loadedClasses) {
+                    await setDoc(doc(db, 'classes', cl.id), sanitizeFirestoreData(cl));
+                  }
+                } else {
+                  loadedClasses = [];
+                  setClasses([]);
+                  localStorage.setItem('smp_classes', JSON.stringify([]));
                 }
               }
               isFirstRun = false;
@@ -229,10 +235,16 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 loadedSubjects = fsSubjects;
                 setSubjects(fsSubjects);
                 localStorage.setItem('smp_subjects', JSON.stringify(fsSubjects));
-              } else if (isFirstRun) {
-                console.log("Firestore 'subjects' collection is empty. Seeding initial data...");
-                for (const sb of loadedSubjects) {
-                  await setDoc(doc(db, 'subjects', sb.id), sanitizeFirestoreData(sb));
+              } else {
+                if (isFirstRun) {
+                  console.log("Firestore 'subjects' collection is empty. Seeding initial data...");
+                  for (const sb of loadedSubjects) {
+                    await setDoc(doc(db, 'subjects', sb.id), sanitizeFirestoreData(sb));
+                  }
+                } else {
+                  loadedSubjects = [];
+                  setSubjects([]);
+                  localStorage.setItem('smp_subjects', JSON.stringify([]));
                 }
               }
               isFirstRun = false;
@@ -277,10 +289,16 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                     }
                   }
                 }
-              } else if (isFirstRun) {
-                console.log("Firestore 'teachers' collection is empty. Seeding...");
-                for (const tc of loadedTeachers) {
-                  await setDoc(doc(db, 'teachers', tc.id), sanitizeFirestoreData(tc));
+              } else {
+                if (isFirstRun) {
+                  console.log("Firestore 'teachers' collection is empty. Seeding...");
+                  for (const tc of loadedTeachers) {
+                    await setDoc(doc(db, 'teachers', tc.id), sanitizeFirestoreData(tc));
+                  }
+                } else {
+                  loadedTeachers = [];
+                  setTeachers([]);
+                  localStorage.setItem('smp_teachers', JSON.stringify([]));
                 }
               }
               isFirstRun = false;
@@ -325,10 +343,16 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                     }
                   }
                 }
-              } else if (isFirstRun) {
-                console.log("Firestore 'students' collection is empty. Seeding...");
-                for (const st of loadedStudents) {
-                  await setDoc(doc(db, 'students', st.id), sanitizeFirestoreData(st));
+              } else {
+                if (isFirstRun) {
+                  console.log("Firestore 'students' collection is empty. Seeding...");
+                  for (const st of loadedStudents) {
+                    await setDoc(doc(db, 'students', st.id), sanitizeFirestoreData(st));
+                  }
+                } else {
+                  loadedStudents = [];
+                  setStudents([]);
+                  localStorage.setItem('smp_students', JSON.stringify([]));
                 }
               }
               isFirstRun = false;
@@ -358,10 +382,15 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 });
                 setMaterials(fsMaterials);
                 localStorage.setItem('smp_materials', JSON.stringify(fsMaterials));
-              } else if (isFirstRun) {
-                console.log("Firestore 'materials' collection is empty. Seeding...");
-                for (const mt of loadedMaterials) {
-                  await setDoc(doc(db, 'materials', mt.id), sanitizeFirestoreData(mt));
+              } else {
+                if (isFirstRun) {
+                  console.log("Firestore 'materials' collection is empty. Seeding...");
+                  for (const mt of loadedMaterials) {
+                    await setDoc(doc(db, 'materials', mt.id), sanitizeFirestoreData(mt));
+                  }
+                } else {
+                  setMaterials([]);
+                  localStorage.setItem('smp_materials', JSON.stringify([]));
                 }
               }
               isFirstRun = false;
@@ -394,10 +423,15 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 });
                 setAssignments(fsAssignments);
                 localStorage.setItem('smp_assignments', JSON.stringify(fsAssignments));
-              } else if (isFirstRun) {
-                console.log("Firestore 'assignments' collection is empty. Seeding...");
-                for (const as of loadedAssignments) {
-                  await setDoc(doc(db, 'assignments', as.id), sanitizeFirestoreData(as));
+              } else {
+                if (isFirstRun) {
+                  console.log("Firestore 'assignments' collection is empty. Seeding...");
+                  for (const as of loadedAssignments) {
+                    await setDoc(doc(db, 'assignments', as.id), sanitizeFirestoreData(as));
+                  }
+                } else {
+                  setAssignments([]);
+                  localStorage.setItem('smp_assignments', JSON.stringify([]));
                 }
               }
               isFirstRun = false;
@@ -430,10 +464,15 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 });
                 setGrades(fsGrades);
                 localStorage.setItem('smp_grades', JSON.stringify(fsGrades));
-              } else if (isFirstRun) {
-                console.log("Firestore 'grades' collection is empty. Seeding...");
-                for (const gr of loadedGrades) {
-                  await setDoc(doc(db, 'grades', gr.id), sanitizeFirestoreData(gr));
+              } else {
+                if (isFirstRun) {
+                  console.log("Firestore 'grades' collection is empty. Seeding...");
+                  for (const gr of loadedGrades) {
+                    await setDoc(doc(db, 'grades', gr.id), sanitizeFirestoreData(gr));
+                  }
+                } else {
+                  setGrades([]);
+                  localStorage.setItem('smp_grades', JSON.stringify([]));
                 }
               }
               isFirstRun = false;
@@ -512,7 +551,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           }
         }
 
-        setDoc(docRef, sanitizeFirestoreData(docData), { merge: true })
+        setDoc(docRef, sanitizeFirestoreData(docData))
           .catch(err => {
             console.warn(`Firestore sync failed for ${firebaseCollection}/${docId}: `, err);
             const errInfo = {
@@ -1093,6 +1132,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setAssignments(updated);
     
     // Also remove respective grades for cleaner DB
+    const gradesToDelete = grades.filter(g => g.assignmentId === id);
     const updatedGrades = grades.filter(g => g.assignmentId !== id);
     setGrades(updatedGrades);
 
@@ -1103,8 +1143,14 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       try {
         deleteDoc(doc(db, 'assignments', id))
           .catch(err => console.warn(`Firestore delete failed for assignments/${id}: `, err));
+        
+        // Delete all matching grades from Firestore too
+        for (const gd of gradesToDelete) {
+          deleteDoc(doc(db, 'grades', gd.id))
+            .catch(err => console.warn(`Firestore delete failed for grades/${gd.id}: `, err));
+        }
       } catch (err) {
-        console.error(`Synchronous Firestore delete error for assignments/${id}: `, err);
+        console.error(`Synchronous Firestore delete error for assignments/grades: `, err);
       }
     }
   };
