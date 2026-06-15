@@ -1,10 +1,10 @@
 {
-  "projectId": "e-learning-alirsyad",
-  "appId": "1:549738525520:web:a4bce85afb2239ad89f255",
   "apiKey": "AIzaSyAUAtmze7UbKNWo_4alHKu9yey_VlUkepY",
   "authDomain": "e-learning-alirsyad.firebaseapp.com",
-  "firestoreDatabaseId": "(default)",
+  "projectId": "e-learning-alirsyad",
   "storageBucket": "e-learning-alirsyad.firebasestorage.app",
   "messagingSenderId": "549738525520",
-  "measurementId": "G-QCXNVFRDV5"
+  "appId": "1:549738525520:web:a4bce85afb2239ad89f255",
+  "measurementId": "G-QCXNVFRDV5",
+  "firestoreDatabaseId": "(default)"
 }
