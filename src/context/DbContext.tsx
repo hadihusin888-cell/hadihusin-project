@@ -102,6 +102,15 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
+const logFirestoreSyncError = (message: string, error: unknown) => {
+  const errStr = error instanceof Error ? error.message : String(error);
+  if (errStr.includes("offline") || errStr.includes("Failed to get document") || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+    console.warn(`${message} (Using offline-first cached database configuration): ${errStr}`);
+  } else {
+    console.error(`${message}: ${errStr}`);
+  }
+};
+
 export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [classes, setClasses] = useState<Class[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -197,7 +206,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 }
               }
             } catch (err) {
-              console.error("Failed to load classes from Firestore: ", err);
+              logFirestoreSyncError("Failed to load classes from Firestore", err);
             }
           };
 
@@ -223,7 +232,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 }
               }
             } catch (err) {
-              console.error("Failed to load subjects from Firestore: ", err);
+              logFirestoreSyncError("Failed to load subjects from Firestore", err);
             }
           };
 
@@ -268,7 +277,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 }
               }
             } catch (err) {
-              console.error("Failed to load teachers from Firestore: ", err);
+              logFirestoreSyncError("Failed to load teachers from Firestore", err);
             }
           };
 
@@ -313,7 +322,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 }
               }
             } catch (err) {
-              console.error("Failed to load students from Firestore: ", err);
+              logFirestoreSyncError("Failed to load students from Firestore", err);
             }
           };
 
@@ -344,7 +353,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 }
               }
             } catch (err) {
-              console.error("Failed to load materials from Firestore: ", err);
+              logFirestoreSyncError("Failed to load materials from Firestore", err);
             }
           };
 
@@ -378,7 +387,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 }
               }
             } catch (err) {
-              console.error("Failed to load assignments from Firestore: ", err);
+              logFirestoreSyncError("Failed to load assignments from Firestore", err);
             }
           };
 
@@ -412,7 +421,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 }
               }
             } catch (err) {
-              console.error("Failed to load grades from Firestore: ", err);
+              logFirestoreSyncError("Failed to load grades from Firestore", err);
             }
           };
 
@@ -430,7 +439,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 await setDoc(doc(db, 'adminConfigs', 'config'), { adminPassword: loadedAdminPassword });
               }
             } catch (err) {
-              console.error("Failed to load admin config from Firestore: ", err);
+              logFirestoreSyncError("Failed to load admin config from Firestore", err);
             }
           };
 
@@ -447,7 +456,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           ]);
         }
       } catch (e) {
-        console.error("General error synchronizing Firestore: ", e);
+        logFirestoreSyncError("General error synchronizing Firestore", e);
       } finally {
         setIsLoading(false);
       }
@@ -529,7 +538,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
               }
             }
           } catch (err) {
-            console.error("Real-time admin config fallback check failed: ", err);
+            logFirestoreSyncError("Real-time admin config fallback check failed", err);
           }
         }
       }
@@ -575,7 +584,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
             }
           }
         } catch (err) {
-          console.error("Real-time teacher login lookup failed: ", err);
+          logFirestoreSyncError("Real-time teacher login lookup failed", err);
         }
       }
       throw new Error('NIK atau Password Guru salah.');
@@ -620,7 +629,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
             }
           }
         } catch (err) {
-          console.error("Real-time student login lookup failed: ", err);
+          logFirestoreSyncError("Real-time student login lookup failed", err);
         }
       }
       throw new Error('NIS atau Password Siswa salah.');
