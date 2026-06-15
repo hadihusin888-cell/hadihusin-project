@@ -25,6 +25,15 @@ async function startServer() {
   // Use JSON middleware
   app.use(express.json());
 
+  // Strict Caching Prevention for real-time Cloud and Multi-Browser Consistency
+  app.use("/api", (req, res, next) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("Surrogate-Control", "no-store");
+    next();
+  });
+
   // API Route: Health check
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });

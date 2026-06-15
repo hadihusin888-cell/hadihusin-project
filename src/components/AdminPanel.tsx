@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useDb } from '../context/DbContext';
 import { Class, Subject, Teacher, Student } from '../types';
+import SyncIndicator from './SyncIndicator';
 import { 
   LayoutDashboard, 
   School, 
@@ -550,16 +551,21 @@ export default function AdminPanel() {
       <main className="flex-1 p-4 sm:p-8 lg:p-10 pb-24 md:pb-10 overflow-y-auto">
         
         {/* Dynamic header title based on activeTab */}
-        <div className="mb-8 select-none">
-          <p className="text-xs text-slate-400 uppercase font-mono tracking-wider">Halaman Admin Portal</p>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-            {activeTab === 'dash' && 'Ringkasan Utama Akademis'}
-            {activeTab === 'kelas' && 'Kelola Rombongan Kelas'}
-            {activeTab === 'mapel' && 'Kelola Mata Pelajaran'}
-            {activeTab === 'guru' && 'Kelola Guru Pengampu'}
-            {activeTab === 'siswa' && 'Kelola Pembelajaran Siswa'}
-            {activeTab === 'setting' && 'Sandi &amp; Keamanan'}
-          </h2>
+        <div className="mb-8 select-none flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200/50 pb-4">
+          <div>
+            <p className="text-xs text-slate-400 uppercase font-mono tracking-wider">Halaman Admin Portal</p>
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+              {activeTab === 'dash' && 'Ringkasan Utama Akademis'}
+              {activeTab === 'kelas' && 'Kelola Rombongan Kelas'}
+              {activeTab === 'mapel' && 'Kelola Mata Pelajaran'}
+              {activeTab === 'guru' && 'Kelola Guru Pengampu'}
+              {activeTab === 'siswa' && 'Kelola Pembelajaran Siswa'}
+              {activeTab === 'setting' && 'Sandi &amp; Keamanan'}
+            </h2>
+          </div>
+          <div className="flex items-center sm:justify-end">
+            <SyncIndicator />
+          </div>
         </div>
 
         {/* TAB 1: RINGKASAN */}

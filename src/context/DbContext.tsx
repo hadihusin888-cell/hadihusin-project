@@ -21,6 +21,9 @@ interface DbContextType {
   adminPassword: string;
   currentUser: SessionUser | null;
   isLoading: boolean;
+  isSyncing: boolean;
+  lastSynced: string | null;
+  refreshData: () => Promise<void>;
   
   // Auth actions
   login: (username: string, password: string, role: 'ADMIN' | 'TEACHER' | 'STUDENT') => Promise<SessionUser>;
@@ -81,8 +84,75 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const [adminPassword, setAdminPassword] = useState<string>('admin123');
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [lastSynced, setLastSynced] = useState<string | null>(null);
 
-  // Synchronous initial fetch & live synchronization polling loop
+  // Fetch function with Cache-Buster with cloud relational state
+  const refreshData = async () => {
+    setIsSyncing(true);
+    try {
+      // Use time to bust browser or proxy cache
+      const response = await fetch(`/api/data?t=${Date.now()}`);
+      if (response.ok) {
+        const data = await response.json();
+        setClasses(data.classes || []);
+        setSubjects(data.subjects || []);
+        setTeachers(data.teachers || []);
+        setStudents(data.students || []);
+        setMaterials(data.materials || []);
+        setAssignments(data.assignments || []);
+        setGrades(data.grades || []);
+        setAdminPassword(data.adminPassword || 'admin123');
+        setLastSynced(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+
+        // Save current state as local standby cache
+        localStorage.setItem('smp_classes', JSON.stringify(data.classes || []));
+        localStorage.setItem('smp_subjects', JSON.stringify(data.subjects || []));
+        localStorage.setItem('smp_teachers', JSON.stringify(data.teachers || []));
+        localStorage.setItem('smp_students', JSON.stringify(data.students || []));
+        localStorage.setItem('smp_materials', JSON.stringify(data.materials || []));
+        localStorage.setItem('smp_assignments', JSON.stringify(data.assignments || []));
+        localStorage.setItem('smp_grades', JSON.stringify(data.grades || []));
+        localStorage.setItem('smp_admin_pwd', data.adminPassword || 'admin123');
+
+        // Align currentUser metadata if there was a modification on other screens
+        const storedUser = localStorage.getItem('smp_current_user');
+        if (storedUser) {
+          const parsedUser = JSON.parse(storedUser);
+          if (parsedUser.role === 'TEACHER') {
+            const liveTeacher = (data.teachers || []).find((t: Teacher) => t.id === parsedUser.id);
+            if (liveTeacher) {
+              const updatedUser: SessionUser = {
+                ...parsedUser,
+                name: liveTeacher.name,
+                meta: { ...parsedUser.meta, nik: liveTeacher.nik }
+              };
+              setCurrentUser(updatedUser);
+              localStorage.setItem('smp_current_user', JSON.stringify(updatedUser));
+            }
+          } else if (parsedUser.role === 'STUDENT') {
+            const liveStudent = (data.students || []).find((s: Student) => s.id === parsedUser.id);
+            if (liveStudent) {
+              const updatedUser: SessionUser = {
+                ...parsedUser,
+                name: liveStudent.name,
+                meta: { ...parsedUser.meta, nis: liveStudent.nis, classId: liveStudent.classId }
+              };
+              setCurrentUser(updatedUser);
+              localStorage.setItem('smp_current_user', JSON.stringify(updatedUser));
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn("Offline or background REST server data sync failed:", error);
+    } finally {
+      setIsLoading(false);
+      setIsSyncing(false);
+    }
+  };
+
+  // Synchronous initial fetch & live synchronization polling loop (low frequency: every 2 minutes / 120 seconds)
   useEffect(() => {
     // 1. Instantly load from localStorage for lightning-fast launch presentation state
     const storedClasses = localStorage.getItem('smp_classes');
@@ -112,73 +182,26 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       setIsLoading(false);
     }
 
-    // 2. Fetch function to bridge live cloud relational state down to device
-    const fetchLiveData = async () => {
-      try {
-        const response = await fetch('/api/data');
-        if (response.ok) {
-          const data = await response.json();
-          setClasses(data.classes || []);
-          setSubjects(data.subjects || []);
-          setTeachers(data.teachers || []);
-          setStudents(data.students || []);
-          setMaterials(data.materials || []);
-          setAssignments(data.assignments || []);
-          setGrades(data.grades || []);
-          setAdminPassword(data.adminPassword || 'admin123');
+    refreshData();
 
-          // Save current state as local standby cache
-          localStorage.setItem('smp_classes', JSON.stringify(data.classes || []));
-          localStorage.setItem('smp_subjects', JSON.stringify(data.subjects || []));
-          localStorage.setItem('smp_teachers', JSON.stringify(data.teachers || []));
-          localStorage.setItem('smp_students', JSON.stringify(data.students || []));
-          localStorage.setItem('smp_materials', JSON.stringify(data.materials || []));
-          localStorage.setItem('smp_assignments', JSON.stringify(data.assignments || []));
-          localStorage.setItem('smp_grades', JSON.stringify(data.grades || []));
-          localStorage.setItem('smp_admin_pwd', data.adminPassword || 'admin123');
+    // Set stable background polling interval (every 120 seconds / 2 minutes)
+    // This reduces data / quota consumption significantly (by 96%!) compared to every 5 seconds.
+    const pollingInterval = setInterval(refreshData, 120000);
 
-          // Align currentUser metadata if there was a modification on other screens
-          if (storedUser) {
-            const parsedUser = JSON.parse(storedUser);
-            if (parsedUser.role === 'TEACHER') {
-              const liveTeacher = (data.teachers || []).find((t: Teacher) => t.id === parsedUser.id);
-              if (liveTeacher) {
-                const updatedUser: SessionUser = {
-                  ...parsedUser,
-                  name: liveTeacher.name,
-                  meta: { ...parsedUser.meta, nik: liveTeacher.nik }
-                };
-                setCurrentUser(updatedUser);
-                localStorage.setItem('smp_current_user', JSON.stringify(updatedUser));
-              }
-            } else if (parsedUser.role === 'STUDENT') {
-              const liveStudent = (data.students || []).find((s: Student) => s.id === parsedUser.id);
-              if (liveStudent) {
-                const updatedUser: SessionUser = {
-                  ...parsedUser,
-                  name: liveStudent.name,
-                  meta: { ...parsedUser.meta, nis: liveStudent.nis, classId: liveStudent.classId }
-                };
-                setCurrentUser(updatedUser);
-                localStorage.setItem('smp_current_user', JSON.stringify(updatedUser));
-              }
-            }
-          }
-        }
-      } catch (error) {
-        console.warn("Offline or background REST server data sync failed:", error);
-      } finally {
-        setIsLoading(false);
+    // Dynamic auto-refresher when user shifts browser/tab focus (very low cost, max fresh!)
+    const triggerFocusSync = () => {
+      if (document.visibilityState === 'visible') {
+        refreshData();
       }
     };
 
-    fetchLiveData();
-
-    // Set stable micro-polling sync timer (every 5 seconds) to ensure multi-screen coherence
-    const pollingInterval = setInterval(fetchLiveData, 5000);
+    document.addEventListener('visibilitychange', triggerFocusSync);
+    window.addEventListener('focus', triggerFocusSync);
 
     return () => {
       clearInterval(pollingInterval);
+      document.removeEventListener('visibilitychange', triggerFocusSync);
+      window.removeEventListener('focus', triggerFocusSync);
     };
   }, []);
 
@@ -853,6 +876,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       adminPassword,
       currentUser,
       isLoading,
+      isSyncing,
+      lastSynced,
       login,
       logout,
       updateAdminPassword,
@@ -879,7 +904,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       deleteAssignment,
       submitAssignment,
       gradeAssignment,
-      resetAssignmentValue
+      resetAssignmentValue,
+      refreshData
     }}>
       {children}
     </DbContext.Provider>

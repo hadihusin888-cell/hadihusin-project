@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useDb } from '../context/DbContext';
 import { Material, Assignment, Grade } from '../types';
+import SyncIndicator from './SyncIndicator';
 import { 
   LayoutDashboard, 
   BookOpen, 
@@ -312,15 +313,20 @@ export default function StudentPanel() {
       {/* MOBILE COMPLIANT MAIN CONTENT ZONE */}
       <main id="student-main-layout" className="flex-1 p-4 sm:p-8 lg:p-10 pb-24 md:pb-10 overflow-y-auto font-sans text-left">
         {/* Page title */}
-        <div className="mb-8 select-none">
-          <p className="text-xs text-slate-400 uppercase font-mono tracking-wider">PORTAL BELAJAR SISWA</p>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
-            {activeTab === 'dash' && `Assalamu'alaikum, ${currentStudent?.name?.split(' ')[0]}`}
-            {activeTab === 'materi' && 'Katalog Materi Belajar'}
-            {activeTab === 'tugas' && `Lembar Tugas ${classNameStr}`}
-            {activeTab === 'nilai' && 'Daftar Nilai dan Hasil Belajar'}
-            {activeTab === 'setting' && 'Identitas dan Pengaturan Sandi'}
-          </h2>
+        <div className="mb-8 select-none flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200/50 pb-4">
+          <div>
+            <p className="text-xs text-slate-400 uppercase font-mono tracking-wider">PORTAL BELAJAR SISWA</p>
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
+              {activeTab === 'dash' && `Assalamu'alaikum, ${currentStudent?.name?.split(' ')[0]}`}
+              {activeTab === 'materi' && 'Katalog Materi Belajar'}
+              {activeTab === 'tugas' && `Lembar Tugas ${classNameStr}`}
+              {activeTab === 'nilai' && 'Daftar Nilai dan Hasil Belajar'}
+              {activeTab === 'setting' && 'Identitas dan Pengaturan Sandi'}
+            </h2>
+          </div>
+          <div className="flex items-center sm:justify-end">
+            <SyncIndicator />
+          </div>
         </div>
 
         {/* TAB 1: RINGKASAN */}

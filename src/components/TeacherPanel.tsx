@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useDb } from '../context/DbContext';
 import { Material, Assignment, Grade } from '../types';
+import SyncIndicator from './SyncIndicator';
 import { 
   LayoutDashboard, 
   BookOpen, 
@@ -393,15 +394,20 @@ export default function TeacherPanel() {
       {/* MOBILE MAIN WINDOW WITH DETAILED TAB-CONTENT */}
       <main id="teacher-main-pane" className="flex-1 p-4 sm:p-8 lg:p-10 pb-24 md:pb-10 overflow-y-auto font-sans text-left">
         {/* Page Title */}
-        <div className="mb-8 select-none">
-          <p className="text-xs text-slate-400 uppercase font-mono tracking-wider">HALAMAN PANEL GURU</p>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
-            {activeTab === 'dash' && `Selamat Datang, ${currentTeacher?.name}`}
-            {activeTab === 'materi' && 'Kelola Ringkasan Materi'}
-            {activeTab === 'tugas' && 'Bank Kompetensi Tugas'}
-            {activeTab === 'nilai' && 'Penilaian & Riwayat Pengumpulan'}
-            {activeTab === 'setting' && 'Seting & Keamanan Password'}
-          </h2>
+        <div className="mb-8 select-none flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200/50 pb-4">
+          <div>
+            <p className="text-xs text-slate-400 uppercase font-mono tracking-wider">HALAMAN PANEL GURU</p>
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
+              {activeTab === 'dash' && `Selamat Datang, ${currentTeacher?.name}`}
+              {activeTab === 'materi' && 'Kelola Ringkasan Materi'}
+              {activeTab === 'tugas' && 'Bank Kompetensi Tugas'}
+              {activeTab === 'nilai' && 'Penilaian & Riwayat Pengumpulan'}
+              {activeTab === 'setting' && 'Seting & Keamanan Password'}
+            </h2>
+          </div>
+          <div className="flex items-center sm:justify-end">
+            <SyncIndicator />
+          </div>
         </div>
 
         {/* TAB 1: DASHBOARD */}
