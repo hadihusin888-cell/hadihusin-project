@@ -9,6 +9,55 @@ import {
   Grade, 
   SessionUser,
 } from '../types.ts';
+import { db } from '../firebase.ts';
+import { 
+  collection, 
+  doc, 
+  getDoc, 
+  getDocs, 
+  setDoc, 
+  deleteDoc, 
+  onSnapshot, 
+  writeBatch 
+} from 'firebase/firestore';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: 'custom-e-learning-session',
+      email: 'custom-session-active',
+      emailVerified: true,
+      isAnonymous: false,
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Database Action Failed: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 interface DbContextType {
   classes: Class[];
@@ -87,74 +136,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
 
-  // Fetch function with Cache-Buster with cloud relational state
-  const refreshData = async () => {
-    setIsSyncing(true);
-    try {
-      // Use time to bust browser or proxy cache
-      const response = await fetch(`/api/data?t=${Date.now()}`);
-      if (response.ok) {
-        const data = await response.json();
-        setClasses(data.classes || []);
-        setSubjects(data.subjects || []);
-        setTeachers(data.teachers || []);
-        setStudents(data.students || []);
-        setMaterials(data.materials || []);
-        setAssignments(data.assignments || []);
-        setGrades(data.grades || []);
-        setAdminPassword(data.adminPassword || 'admin123');
-        setLastSynced(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-
-        // Save current state as local standby cache
-        localStorage.setItem('smp_classes', JSON.stringify(data.classes || []));
-        localStorage.setItem('smp_subjects', JSON.stringify(data.subjects || []));
-        localStorage.setItem('smp_teachers', JSON.stringify(data.teachers || []));
-        localStorage.setItem('smp_students', JSON.stringify(data.students || []));
-        localStorage.setItem('smp_materials', JSON.stringify(data.materials || []));
-        localStorage.setItem('smp_assignments', JSON.stringify(data.assignments || []));
-        localStorage.setItem('smp_grades', JSON.stringify(data.grades || []));
-        localStorage.setItem('smp_admin_pwd', data.adminPassword || 'admin123');
-
-        // Align currentUser metadata if there was a modification on other screens
-        const storedUser = localStorage.getItem('smp_current_user');
-        if (storedUser) {
-          const parsedUser = JSON.parse(storedUser);
-          if (parsedUser.role === 'TEACHER') {
-            const liveTeacher = (data.teachers || []).find((t: Teacher) => t.id === parsedUser.id);
-            if (liveTeacher) {
-              const updatedUser: SessionUser = {
-                ...parsedUser,
-                name: liveTeacher.name,
-                meta: { ...parsedUser.meta, nik: liveTeacher.nik }
-              };
-              setCurrentUser(updatedUser);
-              localStorage.setItem('smp_current_user', JSON.stringify(updatedUser));
-            }
-          } else if (parsedUser.role === 'STUDENT') {
-            const liveStudent = (data.students || []).find((s: Student) => s.id === parsedUser.id);
-            if (liveStudent) {
-              const updatedUser: SessionUser = {
-                ...parsedUser,
-                name: liveStudent.name,
-                meta: { ...parsedUser.meta, nis: liveStudent.nis, classId: liveStudent.classId }
-              };
-              setCurrentUser(updatedUser);
-              localStorage.setItem('smp_current_user', JSON.stringify(updatedUser));
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.warn("Offline or background REST server data sync failed:", error);
-    } finally {
-      setIsLoading(false);
-      setIsSyncing(false);
-    }
-  };
-
-  // Synchronous initial fetch & live synchronization polling loop (low frequency: every 2 minutes / 120 seconds)
+  // Fallback state loading helper from local cache for high-fidelity instant start
   useEffect(() => {
-    // 1. Instantly load from localStorage for lightning-fast launch presentation state
     const storedClasses = localStorage.getItem('smp_classes');
     const storedSubjects = localStorage.getItem('smp_subjects');
     const storedTeachers = localStorage.getItem('smp_teachers');
@@ -174,36 +157,216 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     if (storedGrades) setGrades(JSON.parse(storedGrades));
     if (storedAdminPassword) setAdminPassword(storedAdminPassword);
     if (storedUser) setCurrentUser(JSON.parse(storedUser));
+  }, []);
 
-    // If local state is empty, keep loading indicator until at least first background query finishes
-    if (!storedClasses && !storedSubjects && !storedTeachers) {
-      setIsLoading(true);
-    } else {
+  // Set up Firebase Real-Time Synchronization Listeners
+  useEffect(() => {
+    if (!db) {
+      console.warn("Firestore database configuration not active/ready. Running with local caching cache mode.");
       setIsLoading(false);
+      return;
     }
 
-    refreshData();
+    setIsLoading(true);
+    const unsubscribes: (() => void)[] = [];
 
-    // Set stable background polling interval (every 120 seconds / 2 minutes)
-    // This reduces data / quota consumption significantly (by 96%!) compared to every 5 seconds.
-    const pollingInterval = setInterval(refreshData, 120000);
-
-    // Dynamic auto-refresher when user shifts browser/tab focus (very low cost, max fresh!)
-    const triggerFocusSync = () => {
-      if (document.visibilityState === 'visible') {
-        refreshData();
+    let activeLoadedCollections = 0;
+    const checkIsLoadComplete = () => {
+      activeLoadedCollections++;
+      if (activeLoadedCollections >= 8) {
+        setIsLoading(false);
+        setLastSynced(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
       }
     };
 
-    document.addEventListener('visibilitychange', triggerFocusSync);
-    window.addEventListener('focus', triggerFocusSync);
+    // 1. Classes onSnapshot
+    const unsubClasses = onSnapshot(collection(db, 'classes'), (snapshot) => {
+      const list: Class[] = [];
+      snapshot.forEach(doc => {
+        list.push({ id: doc.id, ...doc.data() } as Class);
+      });
+      setClasses(list);
+      localStorage.setItem('smp_classes', JSON.stringify(list));
+      checkIsLoadComplete();
+    }, (error) => {
+      console.warn("Firestore listener 'classes' blocked or offline:", error);
+      checkIsLoadComplete();
+    });
+    unsubscribes.push(unsubClasses);
+
+    // 2. Subjects onSnapshot
+    const unsubSubjects = onSnapshot(collection(db, 'subjects'), (snapshot) => {
+      const list: Subject[] = [];
+      snapshot.forEach(doc => {
+        list.push({ id: doc.id, ...doc.data() } as Subject);
+      });
+      setSubjects(list);
+      localStorage.setItem('smp_subjects', JSON.stringify(list));
+      checkIsLoadComplete();
+    }, (error) => {
+      console.warn("Firestore listener 'subjects' blocked or offline:", error);
+      checkIsLoadComplete();
+    });
+    unsubscribes.push(unsubSubjects);
+
+    // 3. Teachers onSnapshot
+    const unsubTeachers = onSnapshot(collection(db, 'teachers'), (snapshot) => {
+      const list: Teacher[] = [];
+      snapshot.forEach(doc => {
+        list.push({ id: doc.id, ...doc.data() } as Teacher);
+      });
+      setTeachers(list);
+      localStorage.setItem('smp_teachers', JSON.stringify(list));
+      checkIsLoadComplete();
+    }, (error) => {
+      console.warn("Firestore listener 'teachers' blocked or offline:", error);
+      checkIsLoadComplete();
+    });
+    unsubscribes.push(unsubTeachers);
+
+    // 4. Students onSnapshot
+    const unsubStudents = onSnapshot(collection(db, 'students'), (snapshot) => {
+      const list: Student[] = [];
+      snapshot.forEach(doc => {
+        list.push({ id: doc.id, ...doc.data() } as Student);
+      });
+      setStudents(list);
+      localStorage.setItem('smp_students', JSON.stringify(list));
+      checkIsLoadComplete();
+    }, (error) => {
+      console.warn("Firestore listener 'students' blocked or offline:", error);
+      checkIsLoadComplete();
+    });
+    unsubscribes.push(unsubStudents);
+
+    // 5. Materials onSnapshot
+    const unsubMaterials = onSnapshot(collection(db, 'materials'), (snapshot) => {
+      const list: Material[] = [];
+      snapshot.forEach(doc => {
+        list.push({ id: doc.id, ...doc.data() } as Material);
+      });
+      setMaterials(list);
+      localStorage.setItem('smp_materials', JSON.stringify(list));
+      checkIsLoadComplete();
+    }, (error) => {
+      console.warn("Firestore listener 'materials' blocked or offline:", error);
+      checkIsLoadComplete();
+    });
+    unsubscribes.push(unsubMaterials);
+
+    // 6. Assignments onSnapshot
+    const unsubAssignments = onSnapshot(collection(db, 'assignments'), (snapshot) => {
+      const list: Assignment[] = [];
+      snapshot.forEach(doc => {
+        list.push({ id: doc.id, ...doc.data() } as Assignment);
+      });
+      setAssignments(list);
+      localStorage.setItem('smp_assignments', JSON.stringify(list));
+      checkIsLoadComplete();
+    }, (error) => {
+      console.warn("Firestore listener 'assignments' blocked or offline:", error);
+      checkIsLoadComplete();
+    });
+    unsubscribes.push(unsubAssignments);
+
+    // 7. Grades onSnapshot
+    const unsubGrades = onSnapshot(collection(db, 'grades'), (snapshot) => {
+      const list: Grade[] = [];
+      snapshot.forEach(doc => {
+        list.push({ id: doc.id, ...doc.data() } as Grade);
+      });
+      setGrades(list);
+      localStorage.setItem('smp_grades', JSON.stringify(list));
+      checkIsLoadComplete();
+    }, (error) => {
+      console.warn("Firestore listener 'grades' blocked or offline:", error);
+      checkIsLoadComplete();
+    });
+    unsubscribes.push(unsubGrades);
+
+    // 8. AdminConfigs onSnapshot (Seeding admin123 by default if empty)
+    const unsubAdminConfig = onSnapshot(doc(db, 'adminConfigs', 'config'), (snapshot) => {
+      if (snapshot.exists()) {
+        const pwd = snapshot.data().adminPassword;
+        setAdminPassword(pwd || 'admin123');
+        localStorage.setItem('smp_admin_pwd', pwd || 'admin123');
+      } else {
+        setDoc(doc(db, 'adminConfigs', 'config'), { id: 'config', adminPassword: 'admin123' })
+          .catch(err => console.error("Initial seed of adminConfig failed in Firestore Cloud:", err));
+        setAdminPassword('admin123');
+        localStorage.setItem('smp_admin_pwd', 'admin123');
+      }
+      checkIsLoadComplete();
+    }, (error) => {
+      console.warn("Firestore listener 'adminConfigs' blocked or offline:", error);
+      checkIsLoadComplete();
+    });
+    unsubscribes.push(unsubAdminConfig);
 
     return () => {
-      clearInterval(pollingInterval);
-      document.removeEventListener('visibilitychange', triggerFocusSync);
-      window.removeEventListener('focus', triggerFocusSync);
+      unsubscribes.forEach(unsub => unsub());
     };
-  }, []);
+  }, [db]);
+
+  // Handle manual / focus refresh pulls to synchronize state securely
+  const refreshData = async () => {
+    if (!db) return;
+    setIsSyncing(true);
+    try {
+      const collectionsToLoad = ['classes', 'subjects', 'teachers', 'students', 'materials', 'assignments', 'grades'];
+      const responses = await Promise.all(collectionsToLoad.map(col => getDocs(collection(db, col))));
+      
+      const [clsSnap, subSnap, tchSnap, stdSnap, matSnap, asgSnap, grdSnap] = responses;
+
+      const clsList: Class[] = [];
+      clsSnap.forEach(doc => clsList.push({ id: doc.id, ...doc.data() } as Class));
+      setClasses(clsList);
+      localStorage.setItem('smp_classes', JSON.stringify(clsList));
+
+      const subList: Subject[] = [];
+      subSnap.forEach(doc => subList.push({ id: doc.id, ...doc.data() } as Subject));
+      setSubjects(subList);
+      localStorage.setItem('smp_subjects', JSON.stringify(subList));
+
+      const tchList: Teacher[] = [];
+      tchSnap.forEach(doc => tchList.push({ id: doc.id, ...doc.data() } as Teacher));
+      setTeachers(tchList);
+      localStorage.setItem('smp_teachers', JSON.stringify(tchList));
+
+      const stdList: Student[] = [];
+      stdSnap.forEach(doc => stdList.push({ id: doc.id, ...doc.data() } as Student));
+      setStudents(stdList);
+      localStorage.setItem('smp_students', JSON.stringify(stdList));
+
+      const matList: Material[] = [];
+      matSnap.forEach(doc => matList.push({ id: doc.id, ...doc.data() } as Material));
+      setMaterials(matList);
+      localStorage.setItem('smp_materials', JSON.stringify(matList));
+
+      const asgList: Assignment[] = [];
+      asgSnap.forEach(doc => asgList.push({ id: doc.id, ...doc.data() } as Assignment));
+      setAssignments(asgList);
+      localStorage.setItem('smp_assignments', JSON.stringify(asgList));
+
+      const grdList: Grade[] = [];
+      grdSnap.forEach(doc => grdList.push({ id: doc.id, ...doc.data() } as Grade));
+      setGrades(grdList);
+      localStorage.setItem('smp_grades', JSON.stringify(grdList));
+
+      const configRes = await getDoc(doc(db, 'adminConfigs', 'config'));
+      if (configRes.exists()) {
+        const pwd = configRes.data().adminPassword;
+        setAdminPassword(pwd || 'admin123');
+        localStorage.setItem('smp_admin_pwd', pwd || 'admin123');
+      }
+
+      setLastSynced(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    } catch (error) {
+      console.warn("Manual DB pull synchronization reload failed: ", error);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Auth Operations
   const login = async (username: string, password: string, role: 'ADMIN' | 'TEACHER' | 'STUDENT') => {
@@ -247,49 +410,49 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     localStorage.removeItem('smp_current_user');
   };
 
-  const updateAdminPassword = (newPassword: string) => {
+  const updateAdminPassword = async (newPassword: string) => {
     setAdminPassword(newPassword);
     localStorage.setItem('smp_admin_pwd', newPassword);
 
-    fetch('/api/admin/password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ adminPassword: newPassword })
-    }).catch(err => console.error("Error updating admin password:", err));
+    try {
+      await setDoc(doc(db, 'adminConfigs', 'config'), { id: 'config', adminPassword: newPassword }, { merge: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'adminConfigs/config');
+    }
   };
 
-  const updateTeacherPassword = (nik: string, newPassword: string) => {
+  const updateTeacherPassword = async (nik: string, newPassword: string) => {
     const updated = teachers.map(t => {
       if (t.nik === nik) {
-        const teacherUpdated = { ...t, password: newPassword };
-        fetch(`/api/teachers/${t.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: newPassword }),
-        }).catch(err => console.error("Error updating teacher password:", err));
-        return teacherUpdated;
+        return { ...t, password: newPassword };
       }
       return t;
     });
     setTeachers(updated);
     localStorage.setItem('smp_teachers', JSON.stringify(updated));
+
+    try {
+      await setDoc(doc(db, 'teachers', nik), { password: newPassword }, { merge: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `teachers/${nik}`);
+    }
   };
 
-  const updateStudentPassword = (nis: string, newPassword: string) => {
+  const updateStudentPassword = async (nis: string, newPassword: string) => {
     const updated = students.map(s => {
       if (s.nis === nis) {
-        const studentUpdated = { ...s, password: newPassword };
-        fetch(`/api/students/${s.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: newPassword }),
-        }).catch(err => console.error("Error updating student password:", err));
-        return studentUpdated;
+        return { ...s, password: newPassword };
       }
       return s;
     });
     setStudents(updated);
     localStorage.setItem('smp_students', JSON.stringify(updated));
+
+    try {
+      await setDoc(doc(db, 'students', nis), { password: newPassword }, { merge: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `students/${nis}`);
+    }
   };
 
   // Manage Classes
@@ -302,11 +465,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setClasses(updated);
     localStorage.setItem('smp_classes', JSON.stringify(updated));
 
-    fetch('/api/classes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newClass)
-    }).catch(err => console.error("Error adding class:", err));
+    setDoc(doc(db, 'classes', newClass.id), newClass)
+      .catch(err => handleFirestoreError(err, OperationType.WRITE, `classes/${newClass.id}`));
 
     return newClass;
   };
@@ -316,11 +476,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setClasses(updated);
     localStorage.setItem('smp_classes', JSON.stringify(updated));
 
-    fetch(`/api/classes/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name.trim() })
-    }).catch(err => console.error("Error editing class:", err));
+    setDoc(doc(db, 'classes', id), { name: name.trim() }, { merge: true })
+      .catch(err => handleFirestoreError(err, OperationType.WRITE, `classes/${id}`));
   };
 
   const deleteClass = (id: string) => {
@@ -328,9 +485,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setClasses(updated);
     localStorage.setItem('smp_classes', JSON.stringify(updated));
 
-    fetch(`/api/classes/${id}`, {
-      method: 'DELETE'
-    }).catch(err => console.error("Error deleting class:", err));
+    deleteDoc(doc(db, 'classes', id))
+      .catch(err => handleFirestoreError(err, OperationType.DELETE, `classes/${id}`));
   };
 
   // Manage Subjects
@@ -343,11 +499,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setSubjects(updated);
     localStorage.setItem('smp_subjects', JSON.stringify(updated));
 
-    fetch('/api/subjects', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newSub)
-    }).catch(err => console.error("Error adding subject:", err));
+    setDoc(doc(db, 'subjects', newSub.id), newSub)
+      .catch(err => handleFirestoreError(err, OperationType.WRITE, `subjects/${newSub.id}`));
 
     return newSub;
   };
@@ -357,11 +510,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setSubjects(updated);
     localStorage.setItem('smp_subjects', JSON.stringify(updated));
 
-    fetch(`/api/subjects/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name.trim() })
-    }).catch(err => console.error("Error editing subject:", err));
+    setDoc(doc(db, 'subjects', id), { name: name.trim() }, { merge: true })
+      .catch(err => handleFirestoreError(err, OperationType.WRITE, `subjects/${id}`));
   };
 
   const deleteSubject = (id: string) => {
@@ -369,9 +519,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setSubjects(updated);
     localStorage.setItem('smp_subjects', JSON.stringify(updated));
 
-    fetch(`/api/subjects/${id}`, {
-      method: 'DELETE'
-    }).catch(err => console.error("Error deleting subject:", err));
+    deleteDoc(doc(db, 'subjects', id))
+      .catch(err => handleFirestoreError(err, OperationType.DELETE, `subjects/${id}`));
   };
 
   // Manage Teachers
@@ -387,11 +536,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setTeachers(updated);
     localStorage.setItem('smp_teachers', JSON.stringify(updated));
 
-    fetch('/api/teachers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newTeacher)
-    }).catch(err => console.error("Error adding teacher:", err));
+    setDoc(doc(db, 'teachers', newTeacher.id), newTeacher)
+      .catch(err => handleFirestoreError(err, OperationType.WRITE, `teachers/${newTeacher.id}`));
 
     return newTeacher;
   };
@@ -399,21 +545,19 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const editTeacher = (id: string, name: string, subjectsTaught: any[], password?: string) => {
     const updated = teachers.map(t => {
       if (t.id === id) {
+        const pwd = password && password.trim() ? password.trim() : t.password;
         const updatedT = { 
           ...t, 
           name: name.trim(), 
           subjectsTaught,
-          password: password && password.trim() ? password.trim() : t.password
+          password: pwd
         };
-        fetch(`/api/teachers/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            name: name.trim(), 
-            subjectsTaught,
-            password: password && password.trim() ? password.trim() : t.password 
-          })
-        }).catch(err => console.error("Error editing teacher:", err));
+        setDoc(doc(db, 'teachers', id), { 
+          name: name.trim(), 
+          subjectsTaught,
+          password: pwd 
+        }, { merge: true })
+          .catch(err => handleFirestoreError(err, OperationType.WRITE, `teachers/${id}`));
         return updatedT;
       }
       return t;
@@ -427,9 +571,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setTeachers(updated);
     localStorage.setItem('smp_teachers', JSON.stringify(updated));
 
-    fetch(`/api/teachers/${id}`, {
-      method: 'DELETE'
-    }).catch(err => console.error("Error deleting teacher:", err));
+    deleteDoc(doc(db, 'teachers', id))
+      .catch(err => handleFirestoreError(err, OperationType.DELETE, `teachers/${id}`));
   };
 
   // Manage Students
@@ -445,11 +588,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setStudents(updated);
     localStorage.setItem('smp_students', JSON.stringify(updated));
 
-    fetch('/api/students', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newStudent)
-    }).catch(err => console.error("Error adding student:", err));
+    setDoc(doc(db, 'students', newStudent.id), newStudent)
+      .catch(err => handleFirestoreError(err, OperationType.WRITE, `students/${newStudent.id}`));
 
     return newStudent;
   };
@@ -457,21 +597,19 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const editStudent = (id: string, name: string, classId: string, password?: string) => {
     const updated = students.map(s => {
       if (s.id === id) {
+        const pwd = password && password.trim() ? password.trim() : s.password;
         const updatedS = { 
           ...s, 
           name: name.trim(), 
           classId,
-          password: password && password.trim() ? password.trim() : s.password
+          password: pwd
         };
-        fetch(`/api/students/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            name: name.trim(), 
-            classId,
-            password: password && password.trim() ? password.trim() : s.password 
-          })
-        }).catch(err => console.error("Error editing student:", err));
+        setDoc(doc(db, 'students', id), { 
+          name: name.trim(), 
+          classId,
+          password: pwd 
+        }, { merge: true })
+          .catch(err => handleFirestoreError(err, OperationType.WRITE, `students/${id}`));
         return updatedS;
       }
       return s;
@@ -485,11 +623,11 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setStudents(updated);
     localStorage.setItem('smp_students', JSON.stringify(updated));
 
-    fetch(`/api/students/${id}`, {
-      method: 'DELETE'
-    }).catch(err => console.error("Error deleting student:", err));
+    deleteDoc(doc(db, 'students', id))
+      .catch(err => handleFirestoreError(err, OperationType.DELETE, `students/${id}`));
   };
 
+  // Bulk Import
   const importStudentsBulk = async (
     studentsToImport: Array<{ nis: string; name: string; classInput: string; password?: string }>
   ) => {
@@ -503,15 +641,12 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       if (!clsInput) return null;
       const normalized = clsInput.trim().toLowerCase();
       
-      // 1. Try raw ID match
       let matchedClass = classList.find(c => c.id.toLowerCase() === normalized);
       if (matchedClass) return matchedClass.id;
 
-      // 2. Try Name match
       matchedClass = classList.find(c => c.name.toLowerCase() === normalized);
       if (matchedClass) return matchedClass.id;
 
-      // 3. Try fallback
       const stripped = normalized.replace(/[^a-z0-9]/g, '');
       matchedClass = classList.find(c => {
         const clsIdSt = c.id.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -565,14 +700,24 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         localStorage.setItem('smp_students', JSON.stringify(currentStudents));
       }
 
-      await fetch('/api/students/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          classes: newClassesToCreate,
-          students: newStudentsToCreate
-        })
-      }).catch(err => console.error("Error bulk uploading students/classes:", err));
+      try {
+        const batch = writeBatch(db);
+        newClassesToCreate.forEach(cls => {
+          batch.set(doc(db, 'classes', cls.id), cls);
+        });
+        newStudentsToCreate.forEach(std => {
+          batch.set(doc(db, 'students', std.id), std);
+        });
+        await batch.commit();
+      } catch (err) {
+        console.error("Firestore batch commit failed, performing sequential writes:", err);
+        for (const cls of newClassesToCreate) {
+          await setDoc(doc(db, 'classes', cls.id), cls).catch(e => console.error(e));
+        }
+        for (const std of newStudentsToCreate) {
+          await setDoc(doc(db, 'students', std.id), std).catch(e => console.error(e));
+        }
+      }
     }
 
     return {
@@ -604,11 +749,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setMaterials(updated);
     localStorage.setItem('smp_materials', JSON.stringify(updated));
 
-    fetch('/api/materials', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newMat)
-    }).catch(err => console.error("Error adding material:", err));
+    setDoc(doc(db, 'materials', newMat.id), newMat)
+      .catch(err => handleFirestoreError(err, OperationType.WRITE, `materials/${newMat.id}`));
 
     return newMat;
   };
@@ -631,17 +773,14 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           classId, 
           subjectId 
         };
-        fetch(`/api/materials/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            title: title.trim(), 
-            description: description.trim(), 
-            link: link.trim(), 
-            classId, 
-            subjectId 
-          })
-        }).catch(err => console.error("Error editing material:", err));
+        setDoc(doc(db, 'materials', id), { 
+          title: title.trim(), 
+          description: description.trim(), 
+          link: link.trim(), 
+          classId, 
+          subjectId 
+        }, { merge: true })
+          .catch(err => handleFirestoreError(err, OperationType.WRITE, `materials/${id}`));
         return updatedM;
       }
       return m;
@@ -655,9 +794,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setMaterials(updated);
     localStorage.setItem('smp_materials', JSON.stringify(updated));
 
-    fetch(`/api/materials/${id}`, {
-      method: 'DELETE'
-    }).catch(err => console.error("Error deleting material:", err));
+    deleteDoc(doc(db, 'materials', id))
+      .catch(err => handleFirestoreError(err, OperationType.DELETE, `materials/${id}`));
   };
 
   // Assignments CRUD
@@ -689,11 +827,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setAssignments(updated);
     localStorage.setItem('smp_assignments', JSON.stringify(updated));
 
-    fetch('/api/assignments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newAsg)
-    }).catch(err => console.error("Error adding assignment:", err));
+    setDoc(doc(db, 'assignments', newAsg.id), newAsg)
+      .catch(err => handleFirestoreError(err, OperationType.WRITE, `assignments/${newAsg.id}`));
 
     return newAsg;
   };
@@ -722,20 +857,17 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           formEnabled,
           previewEnabled: previewEnabled ?? true
         };
-        fetch(`/api/assignments/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            title: title.trim(), 
-            description: description.trim(), 
-            dueDate, 
-            link: link.trim(), 
-            classId, 
-            subjectId,
-            formEnabled,
-            previewEnabled: previewEnabled ?? true
-          })
-        }).catch(err => console.error("Error editing assignment:", err));
+        setDoc(doc(db, 'assignments', id), { 
+          title: title.trim(), 
+          description: description.trim(), 
+          dueDate, 
+          link: link.trim(), 
+          classId, 
+          subjectId,
+          formEnabled,
+          previewEnabled: previewEnabled ?? true
+        }, { merge: true })
+          .catch(err => handleFirestoreError(err, OperationType.WRITE, `assignments/${id}`));
         return updatedA;
       }
       return a;
@@ -748,16 +880,20 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     const updated = assignments.filter(a => a.id !== id);
     setAssignments(updated);
     
-    // Also remove respective grades locally to keep sync clean
     const updatedGrades = grades.filter(g => g.assignmentId !== id);
     setGrades(updatedGrades);
 
     localStorage.setItem('smp_assignments', JSON.stringify(updated));
     localStorage.setItem('smp_grades', JSON.stringify(updatedGrades));
 
-    fetch(`/api/assignments/${id}`, {
-      method: 'DELETE'
-    }).catch(err => console.error("Error deleting assignment:", err));
+    deleteDoc(doc(db, 'assignments', id))
+      .catch(err => handleFirestoreError(err, OperationType.DELETE, `assignments/${id}`));
+
+    const gradesToDelete = grades.filter(g => g.assignmentId === id);
+    gradesToDelete.forEach(g => {
+      deleteDoc(doc(db, 'grades', g.id))
+        .catch(err => console.error("Error deleting grade item in Firestore:", err));
+    });
   };
 
   // Student Actions: Submission of assignments
@@ -793,11 +929,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setGrades(updated);
     localStorage.setItem('smp_grades', JSON.stringify(updated));
 
-    fetch('/api/grades', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(submittedGrade)
-    }).catch(err => console.error("Error submitting assignment grade data:", err));
+    setDoc(doc(db, 'grades', submittedGrade.id), submittedGrade, { merge: true })
+      .catch(err => handleFirestoreError(err, OperationType.WRITE, `grades/${submittedGrade.id}`));
 
     return submittedGrade;
   };
@@ -806,23 +939,21 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const gradeAssignment = (gradeId: string, gradeValue: number, feedback: string) => {
     const updated = grades.map(g => {
       if (g.id === gradeId) {
+        const gradedAtTime = new Date().toISOString();
         const updatedG = {
           ...g,
           grade: gradeValue,
           feedback: feedback.trim(),
           status: 'GRADED' as const,
-          gradedAt: new Date().toISOString()
+          gradedAt: gradedAtTime
         };
-        fetch(`/api/grades/${gradeId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            grade: gradeValue,
-            feedback: feedback.trim(),
-            status: 'GRADED',
-            gradedAt: updatedG.gradedAt
-          })
-        }).catch(err => console.error("Error grading assignment:", err));
+        setDoc(doc(db, 'grades', gradeId), {
+          grade: gradeValue,
+          feedback: feedback.trim(),
+          status: 'GRADED',
+          gradedAt: gradedAtTime
+        }, { merge: true })
+          .catch(err => handleFirestoreError(err, OperationType.WRITE, `grades/${gradeId}`));
         return updatedG;
       }
       return g;
@@ -844,18 +975,15 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           submittedAt: undefined,
           gradedAt: undefined
         };
-        fetch(`/api/grades/${gradeId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            grade: null,
-            feedback: null,
-            submissionLink: null,
-            status: 'RESET',
-            submittedAt: null,
-            gradedAt: null
-          })
-        }).catch(err => console.error("Error resetting assignment grade:", err));
+        setDoc(doc(db, 'grades', gradeId), {
+          grade: null,
+          feedback: null,
+          submissionLink: null,
+          status: 'RESET',
+          submittedAt: null,
+          gradedAt: null
+        }, { merge: true })
+          .catch(err => handleFirestoreError(err, OperationType.WRITE, `grades/${gradeId}`));
         return updatedG;
       }
       return g;
