@@ -160,6 +160,9 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     if (storedGrades) setGrades(JSON.parse(storedGrades));
     if (storedAdminPassword) setAdminPassword(storedAdminPassword);
     if (storedUser) setCurrentUser(JSON.parse(storedUser));
+    
+    // Set loading to false once cache is fully loaded to prevent stalling on login
+    setIsLoading(false);
   }, []);
 
   // Set up Firebase Real-Time Synchronization Listeners
@@ -170,7 +173,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       return;
     }
 
-    setIsLoading(true);
+    // Do not call setIsLoading(true) here to prevent annoying full-screen flashes/blank views during logins/re-registrations of onSnapshot listeners
     const unsubscribes: (() => void)[] = [];
 
     let activeLoadedCollections = 0;
