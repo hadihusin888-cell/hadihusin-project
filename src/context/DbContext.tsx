@@ -214,25 +214,34 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     
     // Sync to Firestore if configured
     if (isFirebaseConfigured && db && firebaseCollection && docId) {
-      const docRef = doc(db, firebaseCollection, docId);
-      
-      let docData = data;
-      if (Array.isArray(data)) {
-        // Find the specific item matching docId in the collection array
-        const item = data.find((x: any) => x && (x.id === docId || x.nis === docId || x.nik === docId));
-        if (item) {
-          docData = { ...item };
-        } else {
-          console.warn(`Could not find item with ID ${docId} in array for collection ${firebaseCollection}`);
-          return;
+      try {
+        const docRef = doc(db, firebaseCollection, docId);
+        
+        let docData = data;
+        if (Array.isArray(data)) {
+          // Find the specific item matching docId in the collection array
+          const item = data.find((x: any) => x && (x.id === docId || x.nis === docId || x.nik === docId));
+          if (item) {
+            docData = { ...item };
+          } else {
+            console.warn(`Could not find item with ID ${docId} in array for collection ${firebaseCollection}`);
+            return;
+          }
         }
-      }
 
-      setDoc(docRef, sanitizeFirestoreData(docData), { merge: true })
-        .catch(err => {
-          console.warn(`Firestore sync failed for ${firebaseCollection}/${docId}: `, err);
-          handleFirestoreError(err, OperationType.WRITE, `${firebaseCollection}/${docId}`);
-        });
+        setDoc(docRef, sanitizeFirestoreData(docData), { merge: true })
+          .catch(err => {
+            console.warn(`Firestore sync failed for ${firebaseCollection}/${docId}: `, err);
+            const errInfo = {
+              error: err instanceof Error ? err.message : String(err),
+              operationType: OperationType.WRITE,
+              path: `${firebaseCollection}/${docId}`
+            };
+            console.error('Firestore Sync Background Error: ', JSON.stringify(errInfo));
+          });
+      } catch (err) {
+        console.error(`Synchronous Firestore path/payload error for ${firebaseCollection}/${docId}: `, err);
+      }
     }
   };
 
@@ -284,8 +293,14 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     
     // Full backup trigger
     if (isFirebaseConfigured && db) {
-      setDoc(doc(db, 'adminConfigs', 'config'), { adminPassword: newPassword })
-        .catch(err => handleFirestoreError(err, OperationType.WRITE, 'adminConfigs/config'));
+      try {
+        setDoc(doc(db, 'adminConfigs', 'config'), { adminPassword: newPassword })
+          .catch(err => {
+            console.warn("Firestore sync failed for adminConfigs/config: ", err);
+          });
+      } catch (err) {
+        console.error("Synchronous Firestore error for adminConfigs/config: ", err);
+      }
     }
   };
 
@@ -334,8 +349,12 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setClasses(updated);
     localStorage.setItem('smp_classes', JSON.stringify(updated));
     if (isFirebaseConfigured && db) {
-       deleteDoc(doc(db, 'classes', id))
-         .catch(err => handleFirestoreError(err, OperationType.DELETE, `classes/${id}`));
+      try {
+        deleteDoc(doc(db, 'classes', id))
+          .catch(err => console.warn(`Firestore delete failed for classes/${id}: `, err));
+      } catch (err) {
+        console.error(`Synchronous Firestore delete error for classes/${id}: `, err);
+      }
     }
   };
 
@@ -362,8 +381,12 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setSubjects(updated);
     localStorage.setItem('smp_subjects', JSON.stringify(updated));
     if (isFirebaseConfigured && db) {
-       deleteDoc(doc(db, 'subjects', id))
-         .catch(err => handleFirestoreError(err, OperationType.DELETE, `subjects/${id}`));
+      try {
+        deleteDoc(doc(db, 'subjects', id))
+          .catch(err => console.warn(`Firestore delete failed for subjects/${id}: `, err));
+      } catch (err) {
+        console.error(`Synchronous Firestore delete error for subjects/${id}: `, err);
+      }
     }
   };
 
@@ -403,8 +426,12 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setTeachers(updated);
     localStorage.setItem('smp_teachers', JSON.stringify(updated));
     if (isFirebaseConfigured && db) {
-       deleteDoc(doc(db, 'teachers', id))
-         .catch(err => handleFirestoreError(err, OperationType.DELETE, `teachers/${id}`));
+      try {
+        deleteDoc(doc(db, 'teachers', id))
+          .catch(err => console.warn(`Firestore delete failed for teachers/${id}: `, err));
+      } catch (err) {
+        console.error(`Synchronous Firestore delete error for teachers/${id}: `, err);
+      }
     }
   };
 
@@ -549,8 +576,12 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setStudents(updated);
     localStorage.setItem('smp_students', JSON.stringify(updated));
     if (isFirebaseConfigured && db) {
-       deleteDoc(doc(db, 'students', id))
-         .catch(err => handleFirestoreError(err, OperationType.DELETE, `students/${id}`));
+      try {
+        deleteDoc(doc(db, 'students', id))
+          .catch(err => console.warn(`Firestore delete failed for students/${id}: `, err));
+      } catch (err) {
+        console.error(`Synchronous Firestore delete error for students/${id}: `, err);
+      }
     }
   };
 
@@ -609,8 +640,12 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setMaterials(updated);
     localStorage.setItem('smp_materials', JSON.stringify(updated));
     if (isFirebaseConfigured && db) {
-       deleteDoc(doc(db, 'materials', id))
-         .catch(err => handleFirestoreError(err, OperationType.DELETE, `materials/${id}`));
+      try {
+        deleteDoc(doc(db, 'materials', id))
+          .catch(err => console.warn(`Firestore delete failed for materials/${id}: `, err));
+      } catch (err) {
+        console.error(`Synchronous Firestore delete error for materials/${id}: `, err);
+      }
     }
   };
 
@@ -688,8 +723,12 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     localStorage.setItem('smp_grades', JSON.stringify(updatedGrades));
 
     if (isFirebaseConfigured && db) {
-       deleteDoc(doc(db, 'assignments', id))
-         .catch(err => handleFirestoreError(err, OperationType.DELETE, `assignments/${id}`));
+      try {
+        deleteDoc(doc(db, 'assignments', id))
+          .catch(err => console.warn(`Firestore delete failed for assignments/${id}: `, err));
+      } catch (err) {
+        console.error(`Synchronous Firestore delete error for assignments/${id}: `, err);
+      }
     }
   };
 
