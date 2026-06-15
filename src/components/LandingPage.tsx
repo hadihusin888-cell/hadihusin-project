@@ -19,14 +19,14 @@ export default function LandingPage() {
     setErrorMsg('');
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username || !password) {
       setErrorMsg('Semua kolom wajib diisi.');
       return;
     }
     try {
-      login(username, password, role);
+      await login(username, password, role);
       setIsLoginOpen(false);
     } catch (err: any) {
       setErrorMsg(err.message || 'Login gagal.');

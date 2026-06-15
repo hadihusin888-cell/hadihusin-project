@@ -35,7 +35,7 @@ interface DbContextType {
   isLoading: boolean;
   
   // Auth actions
-  login: (username: string, password: string, role: 'ADMIN' | 'TEACHER' | 'STUDENT') => SessionUser;
+  login: (username: string, password: string, role: 'ADMIN' | 'TEACHER' | 'STUDENT') => Promise<SessionUser>;
   logout: () => void;
   updateAdminPassword: (newPassword: string) => void;
   updateTeacherPassword: (nik: string, newPassword: string) => void;
@@ -173,258 +173,278 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
 
         // Fetch data from Firestore to override if configured
         if (isFirebaseConfigured && db) {
-          console.log("Loading existing data from Firestore database, matching user configuration...");
+          console.log("Loading existing data from Firestore database in parallel...");
 
-          // 1. Fetch Classes
-          try {
-            const classesSnap = await getDocs(collection(db, 'classes'));
-            if (!classesSnap.empty) {
-              const fsClasses: Class[] = [];
-              classesSnap.forEach(docSnap => {
-                const d = docSnap.data();
-                fsClasses.push({
-                  id: docSnap.id,
-                  name: d.name || ''
+          const fetchClasses = async () => {
+            try {
+              const classesSnap = await getDocs(collection(db, 'classes'));
+              if (!classesSnap.empty) {
+                const fsClasses: Class[] = [];
+                classesSnap.forEach(docSnap => {
+                  const d = docSnap.data();
+                  fsClasses.push({
+                    id: docSnap.id,
+                    name: d.name || ''
+                  });
                 });
-              });
-              loadedClasses = fsClasses;
-              setClasses(fsClasses);
-              localStorage.setItem('smp_classes', JSON.stringify(fsClasses));
-            } else {
-              console.log("Firestore 'classes' collection is empty. Seeding initial data...");
-              for (const cl of loadedClasses) {
-                await setDoc(doc(db, 'classes', cl.id), sanitizeFirestoreData(cl));
-              }
-            }
-          } catch (err) {
-            console.error("Failed to load classes from Firestore: ", err);
-          }
-
-          // 2. Fetch Subjects
-          try {
-            const subjectsSnap = await getDocs(collection(db, 'subjects'));
-            if (!subjectsSnap.empty) {
-              const fsSubjects: Subject[] = [];
-              subjectsSnap.forEach(docSnap => {
-                const d = docSnap.data();
-                fsSubjects.push({
-                  id: docSnap.id,
-                  name: d.name || ''
-                });
-              });
-              loadedSubjects = fsSubjects;
-              setSubjects(fsSubjects);
-              localStorage.setItem('smp_subjects', JSON.stringify(fsSubjects));
-            } else {
-              console.log("Firestore 'subjects' collection is empty. Seeding initial data...");
-              for (const sb of loadedSubjects) {
-                await setDoc(doc(db, 'subjects', sb.id), sanitizeFirestoreData(sb));
-              }
-            }
-          } catch (err) {
-            console.error("Failed to load subjects from Firestore: ", err);
-          }
-
-          // 3. Fetch Teachers
-          try {
-            const teachersSnap = await getDocs(collection(db, 'teachers'));
-            if (!teachersSnap.empty) {
-              const fsTeachers: Teacher[] = [];
-              teachersSnap.forEach(docSnap => {
-                const d = docSnap.data();
-                fsTeachers.push({
-                  id: docSnap.id,
-                  nik: d.nik || docSnap.id,
-                  name: d.name || '',
-                  password: d.password || d.nik || docSnap.id,
-                  subjectsTaught: d.subjectsTaught || []
-                });
-              });
-              loadedTeachers = fsTeachers;
-              setTeachers(fsTeachers);
-              localStorage.setItem('smp_teachers', JSON.stringify(fsTeachers));
-
-              if (storedUser) {
-                const sUser = JSON.parse(storedUser);
-                if (sUser.role === 'TEACHER') {
-                  const currentTeacher = fsTeachers.find(t => t.id === sUser.id);
-                  if (currentTeacher) {
-                    const updatedUser: SessionUser = {
-                      ...sUser,
-                      name: currentTeacher.name,
-                      meta: { ...sUser.meta, nik: currentTeacher.nik }
-                    };
-                    setCurrentUser(updatedUser);
-                    localStorage.setItem('smp_current_user', JSON.stringify(updatedUser));
-                  }
+                loadedClasses = fsClasses;
+                setClasses(fsClasses);
+                localStorage.setItem('smp_classes', JSON.stringify(fsClasses));
+              } else {
+                console.log("Firestore 'classes' collection is empty. Seeding initial data...");
+                for (const cl of loadedClasses) {
+                  await setDoc(doc(db, 'classes', cl.id), sanitizeFirestoreData(cl));
                 }
               }
-            } else {
-              console.log("Firestore 'teachers' collection is empty. Seeding...");
-              for (const tc of loadedTeachers) {
-                await setDoc(doc(db, 'teachers', tc.id), sanitizeFirestoreData(tc));
-              }
+            } catch (err) {
+              console.error("Failed to load classes from Firestore: ", err);
             }
-          } catch (err) {
-            console.error("Failed to load teachers from Firestore: ", err);
-          }
+          };
 
-          // 4. Fetch Students
-          try {
-            const studentsSnap = await getDocs(collection(db, 'students'));
-            if (!studentsSnap.empty) {
-              const fsStudents: Student[] = [];
-              studentsSnap.forEach(docSnap => {
-                const d = docSnap.data();
-                fsStudents.push({
-                  id: docSnap.id,
-                  nis: d.nis || docSnap.id,
-                  name: d.name || '',
-                  classId: d.classId || '',
-                  password: d.password || d.nis || docSnap.id
+          const fetchSubjects = async () => {
+            try {
+              const subjectsSnap = await getDocs(collection(db, 'subjects'));
+              if (!subjectsSnap.empty) {
+                const fsSubjects: Subject[] = [];
+                subjectsSnap.forEach(docSnap => {
+                  const d = docSnap.data();
+                  fsSubjects.push({
+                    id: docSnap.id,
+                    name: d.name || ''
+                  });
                 });
-              });
-              loadedStudents = fsStudents;
-              setStudents(fsStudents);
-              localStorage.setItem('smp_students', JSON.stringify(fsStudents));
-
-              if (storedUser) {
-                const sUser = JSON.parse(storedUser);
-                if (sUser.role === 'STUDENT') {
-                  const currentStudent = fsStudents.find(s => s.id === sUser.id);
-                  if (currentStudent) {
-                    const updatedUser: SessionUser = {
-                      ...sUser,
-                      name: currentStudent.name,
-                      meta: { ...sUser.meta, nis: currentStudent.nis, classId: currentStudent.classId }
-                    };
-                    setCurrentUser(updatedUser);
-                    localStorage.setItem('smp_current_user', JSON.stringify(updatedUser));
-                  }
+                loadedSubjects = fsSubjects;
+                setSubjects(fsSubjects);
+                localStorage.setItem('smp_subjects', JSON.stringify(fsSubjects));
+              } else {
+                console.log("Firestore 'subjects' collection is empty. Seeding initial data...");
+                for (const sb of loadedSubjects) {
+                  await setDoc(doc(db, 'subjects', sb.id), sanitizeFirestoreData(sb));
                 }
               }
-            } else {
-              console.log("Firestore 'students' collection is empty. Seeding...");
-              for (const st of loadedStudents) {
-                await setDoc(doc(db, 'students', st.id), sanitizeFirestoreData(st));
-              }
+            } catch (err) {
+              console.error("Failed to load subjects from Firestore: ", err);
             }
-          } catch (err) {
-            console.error("Failed to load students from Firestore: ", err);
-          }
+          };
 
-          // 5. Fetch Materials
-          try {
-            const materialsSnap = await getDocs(collection(db, 'materials'));
-            if (!materialsSnap.empty) {
-              const fsMaterials: Material[] = [];
-              materialsSnap.forEach(docSnap => {
-                const d = docSnap.data();
-                fsMaterials.push({
-                  id: docSnap.id,
-                  title: d.title || '',
-                  description: d.description || '',
-                  link: d.link || '',
-                  classId: d.classId || '',
-                  subjectId: d.subjectId || '',
-                  teacherId: d.teacherId || '',
-                  createdAt: d.createdAt || ''
+          const fetchTeachers = async () => {
+            try {
+              const teachersSnap = await getDocs(collection(db, 'teachers'));
+              if (!teachersSnap.empty) {
+                const fsTeachers: Teacher[] = [];
+                teachersSnap.forEach(docSnap => {
+                  const d = docSnap.data();
+                  fsTeachers.push({
+                    id: docSnap.id,
+                    nik: d.nik || docSnap.id,
+                    name: d.name || '',
+                    password: d.password || d.nik || docSnap.id,
+                    subjectsTaught: d.subjectsTaught || []
+                  });
                 });
-              });
-              setMaterials(fsMaterials);
-              localStorage.setItem('smp_materials', JSON.stringify(fsMaterials));
-            } else {
-              console.log("Firestore 'materials' collection is empty. Seeding...");
-              for (const mt of loadedMaterials) {
-                await setDoc(doc(db, 'materials', mt.id), sanitizeFirestoreData(mt));
-              }
-            }
-          } catch (err) {
-            console.error("Failed to load materials from Firestore: ", err);
-          }
+                loadedTeachers = fsTeachers;
+                setTeachers(fsTeachers);
+                localStorage.setItem('smp_teachers', JSON.stringify(fsTeachers));
 
-          // 6. Fetch Assignments
-          try {
-            const assignmentsSnap = await getDocs(collection(db, 'assignments'));
-            if (!assignmentsSnap.empty) {
-              const fsAssignments: Assignment[] = [];
-              assignmentsSnap.forEach(docSnap => {
-                const d = docSnap.data();
-                fsAssignments.push({
-                  id: docSnap.id,
-                  title: d.title || '',
-                  description: d.description || '',
-                  dueDate: d.dueDate || '',
-                  link: d.link || '',
-                  classId: d.classId || '',
-                  subjectId: d.subjectId || '',
-                  teacherId: d.teacherId || '',
-                  formEnabled: d.formEnabled !== undefined ? d.formEnabled : true,
-                  previewEnabled: d.previewEnabled !== undefined ? d.previewEnabled : true,
-                  createdAt: d.createdAt || ''
+                if (storedUser) {
+                  const sUser = JSON.parse(storedUser);
+                  if (sUser.role === 'TEACHER') {
+                    const currentTeacher = fsTeachers.find(t => t.id === sUser.id);
+                    if (currentTeacher) {
+                      const updatedUser: SessionUser = {
+                        ...sUser,
+                        name: currentTeacher.name,
+                        meta: { ...sUser.meta, nik: currentTeacher.nik }
+                      };
+                      setCurrentUser(updatedUser);
+                      localStorage.setItem('smp_current_user', JSON.stringify(updatedUser));
+                    }
+                  }
+                }
+              } else {
+                console.log("Firestore 'teachers' collection is empty. Seeding...");
+                for (const tc of loadedTeachers) {
+                  await setDoc(doc(db, 'teachers', tc.id), sanitizeFirestoreData(tc));
+                }
+              }
+            } catch (err) {
+              console.error("Failed to load teachers from Firestore: ", err);
+            }
+          };
+
+          const fetchStudents = async () => {
+            try {
+              const studentsSnap = await getDocs(collection(db, 'students'));
+              if (!studentsSnap.empty) {
+                const fsStudents: Student[] = [];
+                studentsSnap.forEach(docSnap => {
+                  const d = docSnap.data();
+                  fsStudents.push({
+                    id: docSnap.id,
+                    nis: d.nis || docSnap.id,
+                    name: d.name || '',
+                    classId: d.classId || '',
+                    password: d.password || d.nis || docSnap.id
+                  });
                 });
-              });
-              setAssignments(fsAssignments);
-              localStorage.setItem('smp_assignments', JSON.stringify(fsAssignments));
-            } else {
-              console.log("Firestore 'assignments' collection is empty. Seeding...");
-              for (const as of loadedAssignments) {
-                await setDoc(doc(db, 'assignments', as.id), sanitizeFirestoreData(as));
-              }
-            }
-          } catch (err) {
-            console.error("Failed to load assignments from Firestore: ", err);
-          }
+                loadedStudents = fsStudents;
+                setStudents(fsStudents);
+                localStorage.setItem('smp_students', JSON.stringify(fsStudents));
 
-          // 7. Fetch Grades
-          try {
-            const gradesSnap = await getDocs(collection(db, 'grades'));
-            if (!gradesSnap.empty) {
-              const fsGrades: Grade[] = [];
-              gradesSnap.forEach(docSnap => {
-                const d = docSnap.data();
-                fsGrades.push({
-                  id: docSnap.id,
-                  studentId: d.studentId || '',
-                  assignmentId: d.assignmentId || '',
-                  submissionLink: d.submissionLink || '',
-                  subjectId: d.subjectId || '',
-                  classId: d.classId || '',
-                  status: d.status || 'SUBMITTED',
-                  grade: d.grade,
-                  feedback: d.feedback,
-                  submittedAt: d.submittedAt || '',
-                  gradedAt: d.gradedAt
+                if (storedUser) {
+                  const sUser = JSON.parse(storedUser);
+                  if (sUser.role === 'STUDENT') {
+                    const currentStudent = fsStudents.find(s => s.id === sUser.id);
+                    if (currentStudent) {
+                      const updatedUser: SessionUser = {
+                        ...sUser,
+                        name: currentStudent.name,
+                        meta: { ...sUser.meta, nis: currentStudent.nis, classId: currentStudent.classId }
+                      };
+                      setCurrentUser(updatedUser);
+                      localStorage.setItem('smp_current_user', JSON.stringify(updatedUser));
+                    }
+                  }
+                }
+              } else {
+                console.log("Firestore 'students' collection is empty. Seeding...");
+                for (const st of loadedStudents) {
+                  await setDoc(doc(db, 'students', st.id), sanitizeFirestoreData(st));
+                }
+              }
+            } catch (err) {
+              console.error("Failed to load students from Firestore: ", err);
+            }
+          };
+
+          const fetchMaterials = async () => {
+            try {
+              const materialsSnap = await getDocs(collection(db, 'materials'));
+              if (!materialsSnap.empty) {
+                const fsMaterials: Material[] = [];
+                materialsSnap.forEach(docSnap => {
+                  const d = docSnap.data();
+                  fsMaterials.push({
+                    id: docSnap.id,
+                    title: d.title || '',
+                    description: d.description || '',
+                    link: d.link || '',
+                    classId: d.classId || '',
+                    subjectId: d.subjectId || '',
+                    teacherId: d.teacherId || '',
+                    createdAt: d.createdAt || ''
+                  });
                 });
-              });
-              setGrades(fsGrades);
-              localStorage.setItem('smp_grades', JSON.stringify(fsGrades));
-            } else {
-              console.log("Firestore 'grades' collection is empty. Seeding...");
-              for (const gr of loadedGrades) {
-                await setDoc(doc(db, 'grades', gr.id), sanitizeFirestoreData(gr));
+                setMaterials(fsMaterials);
+                localStorage.setItem('smp_materials', JSON.stringify(fsMaterials));
+              } else {
+                console.log("Firestore 'materials' collection is empty. Seeding...");
+                for (const mt of loadedMaterials) {
+                  await setDoc(doc(db, 'materials', mt.id), sanitizeFirestoreData(mt));
+                }
               }
+            } catch (err) {
+              console.error("Failed to load materials from Firestore: ", err);
             }
-          } catch (err) {
-            console.error("Failed to load grades from Firestore: ", err);
-          }
+          };
 
-          // 8. Fetch Admin Password Config
-          try {
-            const configSnap = await getDoc(doc(db, 'adminConfigs', 'config'));
-            if (configSnap.exists()) {
-              const adminPwdVal = configSnap.data().adminPassword;
-              if (adminPwdVal) {
-                setAdminPassword(adminPwdVal);
-                localStorage.setItem('smp_admin_pwd', adminPwdVal);
+          const fetchAssignments = async () => {
+            try {
+              const assignmentsSnap = await getDocs(collection(db, 'assignments'));
+              if (!assignmentsSnap.empty) {
+                const fsAssignments: Assignment[] = [];
+                assignmentsSnap.forEach(docSnap => {
+                  const d = docSnap.data();
+                  fsAssignments.push({
+                    id: docSnap.id,
+                    title: d.title || '',
+                    description: d.description || '',
+                    dueDate: d.dueDate || '',
+                    link: d.link || '',
+                    classId: d.classId || '',
+                    subjectId: d.subjectId || '',
+                    teacherId: d.teacherId || '',
+                    formEnabled: d.formEnabled !== undefined ? d.formEnabled : true,
+                    previewEnabled: d.previewEnabled !== undefined ? d.previewEnabled : true,
+                    createdAt: d.createdAt || ''
+                  });
+                });
+                setAssignments(fsAssignments);
+                localStorage.setItem('smp_assignments', JSON.stringify(fsAssignments));
+              } else {
+                console.log("Firestore 'assignments' collection is empty. Seeding...");
+                for (const as of loadedAssignments) {
+                  await setDoc(doc(db, 'assignments', as.id), sanitizeFirestoreData(as));
+                }
               }
-            } else {
-              console.log("Admin config is empty in Firestore. Seeding defaults...");
-              await setDoc(doc(db, 'adminConfigs', 'config'), { adminPassword: loadedAdminPassword });
+            } catch (err) {
+              console.error("Failed to load assignments from Firestore: ", err);
             }
-          } catch (err) {
-            console.error("Failed to load admin config from Firestore: ", err);
-          }
+          };
+
+          const fetchGrades = async () => {
+            try {
+              const gradesSnap = await getDocs(collection(db, 'grades'));
+              if (!gradesSnap.empty) {
+                const fsGrades: Grade[] = [];
+                gradesSnap.forEach(docSnap => {
+                  const d = docSnap.data();
+                  fsGrades.push({
+                    id: docSnap.id,
+                    studentId: d.studentId || '',
+                    assignmentId: d.assignmentId || '',
+                    submissionLink: d.submissionLink || '',
+                    subjectId: d.subjectId || '',
+                    classId: d.classId || '',
+                    status: d.status || 'SUBMITTED',
+                    grade: d.grade,
+                    feedback: d.feedback,
+                    submittedAt: d.submittedAt || '',
+                    gradedAt: d.gradedAt
+                  });
+                });
+                setGrades(fsGrades);
+                localStorage.setItem('smp_grades', JSON.stringify(fsGrades));
+              } else {
+                console.log("Firestore 'grades' collection is empty. Seeding...");
+                for (const gr of loadedGrades) {
+                  await setDoc(doc(db, 'grades', gr.id), sanitizeFirestoreData(gr));
+                }
+              }
+            } catch (err) {
+              console.error("Failed to load grades from Firestore: ", err);
+            }
+          };
+
+          const fetchAdminConfig = async () => {
+            try {
+              const configSnap = await getDoc(doc(db, 'adminConfigs', 'config'));
+              if (configSnap.exists()) {
+                const adminPwdVal = configSnap.data().adminPassword;
+                if (adminPwdVal) {
+                  setAdminPassword(adminPwdVal);
+                  localStorage.setItem('smp_admin_pwd', adminPwdVal);
+                }
+              } else {
+                console.log("Admin config is empty in Firestore. Seeding defaults...");
+                await setDoc(doc(db, 'adminConfigs', 'config'), { adminPassword: loadedAdminPassword });
+              }
+            } catch (err) {
+              console.error("Failed to load admin config from Firestore: ", err);
+            }
+          };
+
+          // Run all queries in parallel for high speed and instant update
+          await Promise.all([
+            fetchClasses(),
+            fetchSubjects(),
+            fetchTeachers(),
+            fetchStudents(),
+            fetchMaterials(),
+            fetchAssignments(),
+            fetchGrades(),
+            fetchAdminConfig()
+          ]);
         }
       } catch (e) {
         console.error("General error synchronizing Firestore: ", e);
@@ -479,13 +499,39 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   };
 
   // Auth Operations
-  const login = (username: string, password: string, role: 'ADMIN' | 'TEACHER' | 'STUDENT') => {
+  const login = async (username: string, password: string, role: 'ADMIN' | 'TEACHER' | 'STUDENT') => {
     if (role === 'ADMIN') {
-      if (username.toLowerCase() === 'admin' && password === adminPassword) {
-        const user: SessionUser = { id: 'admin', name: 'Administrator', role: 'ADMIN' };
-        setCurrentUser(user);
-        localStorage.setItem('smp_current_user', JSON.stringify(user));
-        return user;
+      if (username.toLowerCase() === 'admin') {
+        // Quick local check first
+        if (password === adminPassword) {
+          const user: SessionUser = { id: 'admin', name: 'Administrator', role: 'ADMIN' };
+          setCurrentUser(user);
+          localStorage.setItem('smp_current_user', JSON.stringify(user));
+          return user;
+        }
+
+        // Fallback: Check direct from Firestore in real-time
+        if (isFirebaseConfigured && db) {
+          try {
+            console.log("Locally cached admin password check failed, fetching live admin config from Firestore...");
+            const configSnap = await getDoc(doc(db, 'adminConfigs', 'config'));
+            if (configSnap.exists()) {
+              const livePassword = configSnap.data().adminPassword;
+              if (livePassword && password === livePassword) {
+                // Synchronize local cache and state instantly
+                setAdminPassword(livePassword);
+                localStorage.setItem('smp_admin_pwd', livePassword);
+
+                const user: SessionUser = { id: 'admin', name: 'Administrator', role: 'ADMIN' };
+                setCurrentUser(user);
+                localStorage.setItem('smp_current_user', JSON.stringify(user));
+                return user;
+              }
+            }
+          } catch (err) {
+            console.error("Real-time admin config fallback check failed: ", err);
+          }
+        }
       }
       throw new Error('Username Admin salah atau Password salah.');
     }
@@ -498,6 +544,40 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         localStorage.setItem('smp_current_user', JSON.stringify(user));
         return user;
       }
+
+      // Fallback: Check teachers in Firestore
+      if (isFirebaseConfigured && db) {
+        try {
+          console.log("Cached teacher credential check failed, fetching live teacher list from Firestore...");
+          const teachersSnap = await getDocs(collection(db, 'teachers'));
+          if (!teachersSnap.empty) {
+            const fsTeachers: Teacher[] = [];
+            teachersSnap.forEach(docSnap => {
+              const d = docSnap.data();
+              fsTeachers.push({
+                id: docSnap.id,
+                nik: d.nik || docSnap.id,
+                name: d.name || '',
+                password: d.password || d.nik || docSnap.id,
+                subjectsTaught: d.subjectsTaught || []
+              });
+            });
+            // Update state and local storage
+            setTeachers(fsTeachers);
+            localStorage.setItem('smp_teachers', JSON.stringify(fsTeachers));
+
+            const liveTeacher = fsTeachers.find(t => t.nik === username);
+            if (liveTeacher && liveTeacher.password === password) {
+              const user: SessionUser = { id: liveTeacher.id, name: liveTeacher.name, role: 'TEACHER', meta: { nik: liveTeacher.nik } };
+              setCurrentUser(user);
+              localStorage.setItem('smp_current_user', JSON.stringify(user));
+              return user;
+            }
+          }
+        } catch (err) {
+          console.error("Real-time teacher login lookup failed: ", err);
+        }
+      }
       throw new Error('NIK atau Password Guru salah.');
     }
 
@@ -508,6 +588,40 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         setCurrentUser(user);
         localStorage.setItem('smp_current_user', JSON.stringify(user));
         return user;
+      }
+
+      // Fallback: Check students in Firestore
+      if (isFirebaseConfigured && db) {
+        try {
+          console.log("Cached student credential check failed, fetching live student list from Firestore...");
+          const studentsSnap = await getDocs(collection(db, 'students'));
+          if (!studentsSnap.empty) {
+            const fsStudents: Student[] = [];
+            studentsSnap.forEach(docSnap => {
+              const d = docSnap.data();
+              fsStudents.push({
+                id: docSnap.id,
+                nis: d.nis || docSnap.id,
+                name: d.name || '',
+                classId: d.classId || '',
+                password: d.password || d.nis || docSnap.id
+              });
+            });
+            // Update state and local storage
+            setStudents(fsStudents);
+            localStorage.setItem('smp_students', JSON.stringify(fsStudents));
+
+            const liveStudent = fsStudents.find(s => s.nis === username);
+            if (liveStudent && liveStudent.password === password) {
+              const user: SessionUser = { id: liveStudent.id, name: liveStudent.name, role: 'STUDENT', meta: { nis: liveStudent.nis, classId: liveStudent.classId } };
+              setCurrentUser(user);
+              localStorage.setItem('smp_current_user', JSON.stringify(user));
+              return user;
+            }
+          }
+        } catch (err) {
+          console.error("Real-time student login lookup failed: ", err);
+        }
       }
       throw new Error('NIS atau Password Siswa salah.');
     }
