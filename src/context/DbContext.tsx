@@ -20,7 +20,7 @@ import {
   INITIAL_GRADES 
 } from '../data/mockData';
 import { db, isFirebaseConfigured } from '../firebase';
-import { doc, setDoc, getDoc, collection, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, getDocs, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 
 interface DbContextType {
   classes: Class[];
@@ -143,6 +143,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
 
   // Initial Load from LocalStorage & Firestore Sync
   useEffect(() => {
+    const unsubscribes: (() => void)[] = [];
+
     const initAndSync = async () => {
       setIsLoading(true);
       try {
@@ -182,14 +184,14 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
 
         // Fetch data from Firestore to override if configured
         if (isFirebaseConfigured && db) {
-          console.log("Loading existing data from Firestore database in parallel...");
+          console.log("Initializing real-time Firestore listeners for active synchronization...");
 
-          const fetchClasses = async () => {
-            try {
-              const classesSnap = await getDocs(collection(db, 'classes'));
-              if (!classesSnap.empty) {
+          const listenClasses = () => {
+            let isFirstRun = true;
+            const unsub = onSnapshot(collection(db, 'classes'), async (snapshot) => {
+              if (!snapshot.empty) {
                 const fsClasses: Class[] = [];
-                classesSnap.forEach(docSnap => {
+                snapshot.forEach(docSnap => {
                   const d = docSnap.data();
                   fsClasses.push({
                     id: docSnap.id,
@@ -199,23 +201,25 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 loadedClasses = fsClasses;
                 setClasses(fsClasses);
                 localStorage.setItem('smp_classes', JSON.stringify(fsClasses));
-              } else {
+              } else if (isFirstRun) {
                 console.log("Firestore 'classes' collection is empty. Seeding initial data...");
                 for (const cl of loadedClasses) {
                   await setDoc(doc(db, 'classes', cl.id), sanitizeFirestoreData(cl));
                 }
               }
-            } catch (err) {
-              logFirestoreSyncError("Failed to load classes from Firestore", err);
-            }
+              isFirstRun = false;
+            }, (err) => {
+              logFirestoreSyncError("Failed to listen list of classes from Firestore", err);
+            });
+            unsubscribes.push(unsub);
           };
 
-          const fetchSubjects = async () => {
-            try {
-              const subjectsSnap = await getDocs(collection(db, 'subjects'));
-              if (!subjectsSnap.empty) {
+          const listenSubjects = () => {
+            let isFirstRun = true;
+            const unsub = onSnapshot(collection(db, 'subjects'), async (snapshot) => {
+              if (!snapshot.empty) {
                 const fsSubjects: Subject[] = [];
-                subjectsSnap.forEach(docSnap => {
+                snapshot.forEach(docSnap => {
                   const d = docSnap.data();
                   fsSubjects.push({
                     id: docSnap.id,
@@ -225,23 +229,25 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 loadedSubjects = fsSubjects;
                 setSubjects(fsSubjects);
                 localStorage.setItem('smp_subjects', JSON.stringify(fsSubjects));
-              } else {
+              } else if (isFirstRun) {
                 console.log("Firestore 'subjects' collection is empty. Seeding initial data...");
                 for (const sb of loadedSubjects) {
                   await setDoc(doc(db, 'subjects', sb.id), sanitizeFirestoreData(sb));
                 }
               }
-            } catch (err) {
-              logFirestoreSyncError("Failed to load subjects from Firestore", err);
-            }
+              isFirstRun = false;
+            }, (err) => {
+              logFirestoreSyncError("Failed to listen list of subjects from Firestore", err);
+            });
+            unsubscribes.push(unsub);
           };
 
-          const fetchTeachers = async () => {
-            try {
-              const teachersSnap = await getDocs(collection(db, 'teachers'));
-              if (!teachersSnap.empty) {
+          const listenTeachers = () => {
+            let isFirstRun = true;
+            const unsub = onSnapshot(collection(db, 'teachers'), async (snapshot) => {
+              if (!snapshot.empty) {
                 const fsTeachers: Teacher[] = [];
-                teachersSnap.forEach(docSnap => {
+                snapshot.forEach(docSnap => {
                   const d = docSnap.data();
                   fsTeachers.push({
                     id: docSnap.id,
@@ -255,6 +261,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 setTeachers(fsTeachers);
                 localStorage.setItem('smp_teachers', JSON.stringify(fsTeachers));
 
+                // Sync current teacher user if details updated
                 if (storedUser) {
                   const sUser = JSON.parse(storedUser);
                   if (sUser.role === 'TEACHER') {
@@ -270,23 +277,25 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                     }
                   }
                 }
-              } else {
+              } else if (isFirstRun) {
                 console.log("Firestore 'teachers' collection is empty. Seeding...");
                 for (const tc of loadedTeachers) {
                   await setDoc(doc(db, 'teachers', tc.id), sanitizeFirestoreData(tc));
                 }
               }
-            } catch (err) {
-              logFirestoreSyncError("Failed to load teachers from Firestore", err);
-            }
+              isFirstRun = false;
+            }, (err) => {
+              logFirestoreSyncError("Failed to listen list of teachers from Firestore", err);
+            });
+            unsubscribes.push(unsub);
           };
 
-          const fetchStudents = async () => {
-            try {
-              const studentsSnap = await getDocs(collection(db, 'students'));
-              if (!studentsSnap.empty) {
+          const listenStudents = () => {
+            let isFirstRun = true;
+            const unsub = onSnapshot(collection(db, 'students'), async (snapshot) => {
+              if (!snapshot.empty) {
                 const fsStudents: Student[] = [];
-                studentsSnap.forEach(docSnap => {
+                snapshot.forEach(docSnap => {
                   const d = docSnap.data();
                   fsStudents.push({
                     id: docSnap.id,
@@ -300,6 +309,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 setStudents(fsStudents);
                 localStorage.setItem('smp_students', JSON.stringify(fsStudents));
 
+                // Sync current student user if details updated
                 if (storedUser) {
                   const sUser = JSON.parse(storedUser);
                   if (sUser.role === 'STUDENT') {
@@ -315,23 +325,25 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                     }
                   }
                 }
-              } else {
+              } else if (isFirstRun) {
                 console.log("Firestore 'students' collection is empty. Seeding...");
                 for (const st of loadedStudents) {
                   await setDoc(doc(db, 'students', st.id), sanitizeFirestoreData(st));
                 }
               }
-            } catch (err) {
-              logFirestoreSyncError("Failed to load students from Firestore", err);
-            }
+              isFirstRun = false;
+            }, (err) => {
+              logFirestoreSyncError("Failed to listen list of students from Firestore", err);
+            });
+            unsubscribes.push(unsub);
           };
 
-          const fetchMaterials = async () => {
-            try {
-              const materialsSnap = await getDocs(collection(db, 'materials'));
-              if (!materialsSnap.empty) {
+          const listenMaterials = () => {
+            let isFirstRun = true;
+            const unsub = onSnapshot(collection(db, 'materials'), async (snapshot) => {
+              if (!snapshot.empty) {
                 const fsMaterials: Material[] = [];
-                materialsSnap.forEach(docSnap => {
+                snapshot.forEach(docSnap => {
                   const d = docSnap.data();
                   fsMaterials.push({
                     id: docSnap.id,
@@ -346,23 +358,25 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 });
                 setMaterials(fsMaterials);
                 localStorage.setItem('smp_materials', JSON.stringify(fsMaterials));
-              } else {
+              } else if (isFirstRun) {
                 console.log("Firestore 'materials' collection is empty. Seeding...");
                 for (const mt of loadedMaterials) {
                   await setDoc(doc(db, 'materials', mt.id), sanitizeFirestoreData(mt));
                 }
               }
-            } catch (err) {
-              logFirestoreSyncError("Failed to load materials from Firestore", err);
-            }
+              isFirstRun = false;
+            }, (err) => {
+              logFirestoreSyncError("Failed to listen list of materials from Firestore", err);
+            });
+            unsubscribes.push(unsub);
           };
 
-          const fetchAssignments = async () => {
-            try {
-              const assignmentsSnap = await getDocs(collection(db, 'assignments'));
-              if (!assignmentsSnap.empty) {
+          const listenAssignments = () => {
+            let isFirstRun = true;
+            const unsub = onSnapshot(collection(db, 'assignments'), async (snapshot) => {
+              if (!snapshot.empty) {
                 const fsAssignments: Assignment[] = [];
-                assignmentsSnap.forEach(docSnap => {
+                snapshot.forEach(docSnap => {
                   const d = docSnap.data();
                   fsAssignments.push({
                     id: docSnap.id,
@@ -380,23 +394,25 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 });
                 setAssignments(fsAssignments);
                 localStorage.setItem('smp_assignments', JSON.stringify(fsAssignments));
-              } else {
+              } else if (isFirstRun) {
                 console.log("Firestore 'assignments' collection is empty. Seeding...");
                 for (const as of loadedAssignments) {
                   await setDoc(doc(db, 'assignments', as.id), sanitizeFirestoreData(as));
                 }
               }
-            } catch (err) {
-              logFirestoreSyncError("Failed to load assignments from Firestore", err);
-            }
+              isFirstRun = false;
+            }, (err) => {
+              logFirestoreSyncError("Failed to listen list of assignments from Firestore", err);
+            });
+            unsubscribes.push(unsub);
           };
 
-          const fetchGrades = async () => {
-            try {
-              const gradesSnap = await getDocs(collection(db, 'grades'));
-              if (!gradesSnap.empty) {
+          const listenGrades = () => {
+            let isFirstRun = true;
+            const unsub = onSnapshot(collection(db, 'grades'), async (snapshot) => {
+              if (!snapshot.empty) {
                 const fsGrades: Grade[] = [];
-                gradesSnap.forEach(docSnap => {
+                snapshot.forEach(docSnap => {
                   const d = docSnap.data();
                   fsGrades.push({
                     id: docSnap.id,
@@ -414,46 +430,47 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                 });
                 setGrades(fsGrades);
                 localStorage.setItem('smp_grades', JSON.stringify(fsGrades));
-              } else {
+              } else if (isFirstRun) {
                 console.log("Firestore 'grades' collection is empty. Seeding...");
                 for (const gr of loadedGrades) {
                   await setDoc(doc(db, 'grades', gr.id), sanitizeFirestoreData(gr));
                 }
               }
-            } catch (err) {
-              logFirestoreSyncError("Failed to load grades from Firestore", err);
-            }
+              isFirstRun = false;
+            }, (err) => {
+              logFirestoreSyncError("Failed to listen list of grades from Firestore", err);
+            });
+            unsubscribes.push(unsub);
           };
 
-          const fetchAdminConfig = async () => {
-            try {
-              const configSnap = await getDoc(doc(db, 'adminConfigs', 'config'));
-              if (configSnap.exists()) {
-                const adminPwdVal = configSnap.data().adminPassword;
+          const listenAdminConfig = () => {
+            let isFirstRun = true;
+            const unsub = onSnapshot(doc(db, 'adminConfigs', 'config'), async (docSnap) => {
+              if (docSnap.exists()) {
+                const adminPwdVal = docSnap.data().adminPassword;
                 if (adminPwdVal) {
                   setAdminPassword(adminPwdVal);
                   localStorage.setItem('smp_admin_pwd', adminPwdVal);
                 }
-              } else {
+              } else if (isFirstRun) {
                 console.log("Admin config is empty in Firestore. Seeding defaults...");
                 await setDoc(doc(db, 'adminConfigs', 'config'), { adminPassword: loadedAdminPassword });
               }
-            } catch (err) {
-              logFirestoreSyncError("Failed to load admin config from Firestore", err);
-            }
+              isFirstRun = false;
+            }, (err) => {
+              logFirestoreSyncError("Failed to listen admin config config from Firestore", err);
+            });
+            unsubscribes.push(unsub);
           };
 
-          // Run all queries in parallel for high speed and instant update
-          await Promise.all([
-            fetchClasses(),
-            fetchSubjects(),
-            fetchTeachers(),
-            fetchStudents(),
-            fetchMaterials(),
-            fetchAssignments(),
-            fetchGrades(),
-            fetchAdminConfig()
-          ]);
+          listenClasses();
+          listenSubjects();
+          listenTeachers();
+          listenStudents();
+          listenMaterials();
+          listenAssignments();
+          listenGrades();
+          listenAdminConfig();
         }
       } catch (e) {
         logFirestoreSyncError("General error synchronizing Firestore", e);
@@ -463,6 +480,10 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     };
 
     initAndSync();
+
+    return () => {
+      unsubscribes.forEach(unsub => unsub());
+    };
   }, []);
 
   // Sync state functions helper
