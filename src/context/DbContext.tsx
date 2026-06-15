@@ -114,77 +114,6 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Initial Load from LocalStorage
-  useEffect(() => {
-    try {
-      const storedClasses = localStorage.getItem('smp_classes');
-      const storedSubjects = localStorage.getItem('smp_subjects');
-      const storedTeachers = localStorage.getItem('smp_teachers');
-      const storedStudents = localStorage.getItem('smp_students');
-      const storedMaterials = localStorage.getItem('smp_materials');
-      const storedAssignments = localStorage.getItem('smp_assignments');
-      const storedGrades = localStorage.getItem('smp_grades');
-      const storedAdminPassword = localStorage.getItem('smp_admin_pwd');
-      const storedUser = localStorage.getItem('smp_current_user');
-
-      if (storedClasses) setClasses(JSON.parse(storedClasses));
-      else {
-        setClasses(INITIAL_CLASSES);
-        localStorage.setItem('smp_classes', JSON.stringify(INITIAL_CLASSES));
-      }
-
-      if (storedSubjects) setSubjects(JSON.parse(storedSubjects));
-      else {
-        setSubjects(INITIAL_SUBJECTS);
-        localStorage.setItem('smp_subjects', JSON.stringify(INITIAL_SUBJECTS));
-      }
-
-      if (storedTeachers) setTeachers(JSON.parse(storedTeachers));
-      else {
-        setTeachers(INITIAL_TEACHERS);
-        localStorage.setItem('smp_teachers', JSON.stringify(INITIAL_TEACHERS));
-      }
-
-      if (storedStudents) setStudents(JSON.parse(storedStudents));
-      else {
-        setStudents(INITIAL_STUDENTS);
-        localStorage.setItem('smp_students', JSON.stringify(INITIAL_STUDENTS));
-      }
-
-      if (storedMaterials) setMaterials(JSON.parse(storedMaterials));
-      else {
-        setMaterials(INITIAL_MATERIALS);
-        localStorage.setItem('smp_materials', JSON.stringify(INITIAL_MATERIALS));
-      }
-
-      if (storedAssignments) setAssignments(JSON.parse(storedAssignments));
-      else {
-        setAssignments(INITIAL_ASSIGNMENTS);
-        localStorage.setItem('smp_assignments', JSON.stringify(INITIAL_ASSIGNMENTS));
-      }
-
-      if (storedGrades) setGrades(JSON.parse(storedGrades));
-      else {
-        setGrades(INITIAL_GRADES);
-        localStorage.setItem('smp_grades', JSON.stringify(INITIAL_GRADES));
-      }
-
-      if (storedAdminPassword) {
-        setAdminPassword(storedAdminPassword);
-      } else {
-        localStorage.setItem('smp_admin_pwd', 'admin123');
-      }
-
-      if (storedUser) {
-        setCurrentUser(JSON.parse(storedUser));
-      }
-    } catch (e) {
-      console.error("Error loading SMP e-learning data: ", e);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
   // Helper to remove any 'undefined' property values recursively before writing to Firestore
   const sanitizeFirestoreData = (obj: any): any => {
     if (obj === null || obj === undefined) return null;
@@ -202,6 +131,310 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     }
     return obj;
   };
+
+  // Initial Load from LocalStorage & Firestore Sync
+  useEffect(() => {
+    const initAndSync = async () => {
+      setIsLoading(true);
+      try {
+        const storedClasses = localStorage.getItem('smp_classes');
+        const storedSubjects = localStorage.getItem('smp_subjects');
+        const storedTeachers = localStorage.getItem('smp_teachers');
+        const storedStudents = localStorage.getItem('smp_students');
+        const storedMaterials = localStorage.getItem('smp_materials');
+        const storedAssignments = localStorage.getItem('smp_assignments');
+        const storedGrades = localStorage.getItem('smp_grades');
+        const storedAdminPassword = localStorage.getItem('smp_admin_pwd');
+        const storedUser = localStorage.getItem('smp_current_user');
+
+        let loadedClasses = storedClasses ? JSON.parse(storedClasses) : INITIAL_CLASSES;
+        let loadedSubjects = storedSubjects ? JSON.parse(storedSubjects) : INITIAL_SUBJECTS;
+        let loadedTeachers = storedTeachers ? JSON.parse(storedTeachers) : INITIAL_TEACHERS;
+        let loadedStudents = storedStudents ? JSON.parse(storedStudents) : INITIAL_STUDENTS;
+        let loadedMaterials = storedMaterials ? JSON.parse(storedMaterials) : INITIAL_MATERIALS;
+        let loadedAssignments = storedAssignments ? JSON.parse(storedAssignments) : INITIAL_ASSIGNMENTS;
+        let loadedGrades = storedGrades ? JSON.parse(storedGrades) : INITIAL_GRADES;
+        let loadedAdminPassword = storedAdminPassword || 'admin123';
+
+        if (storedUser) {
+          setCurrentUser(JSON.parse(storedUser));
+        }
+
+        // Apply offline state first for immediate UI response
+        setClasses(loadedClasses);
+        setSubjects(loadedSubjects);
+        setTeachers(loadedTeachers);
+        setStudents(loadedStudents);
+        setMaterials(loadedMaterials);
+        setAssignments(loadedAssignments);
+        setGrades(loadedGrades);
+        setAdminPassword(loadedAdminPassword);
+        setIsLoading(false); // Unblock the UI instantly so the main page displays immediately without waiting for database requests
+
+        // Fetch data from Firestore to override if configured
+        if (isFirebaseConfigured && db) {
+          console.log("Loading existing data from Firestore database, matching user configuration...");
+
+          // 1. Fetch Classes
+          try {
+            const classesSnap = await getDocs(collection(db, 'classes'));
+            if (!classesSnap.empty) {
+              const fsClasses: Class[] = [];
+              classesSnap.forEach(docSnap => {
+                const d = docSnap.data();
+                fsClasses.push({
+                  id: docSnap.id,
+                  name: d.name || ''
+                });
+              });
+              loadedClasses = fsClasses;
+              setClasses(fsClasses);
+              localStorage.setItem('smp_classes', JSON.stringify(fsClasses));
+            } else {
+              console.log("Firestore 'classes' collection is empty. Seeding initial data...");
+              for (const cl of loadedClasses) {
+                await setDoc(doc(db, 'classes', cl.id), sanitizeFirestoreData(cl));
+              }
+            }
+          } catch (err) {
+            console.error("Failed to load classes from Firestore: ", err);
+          }
+
+          // 2. Fetch Subjects
+          try {
+            const subjectsSnap = await getDocs(collection(db, 'subjects'));
+            if (!subjectsSnap.empty) {
+              const fsSubjects: Subject[] = [];
+              subjectsSnap.forEach(docSnap => {
+                const d = docSnap.data();
+                fsSubjects.push({
+                  id: docSnap.id,
+                  name: d.name || ''
+                });
+              });
+              loadedSubjects = fsSubjects;
+              setSubjects(fsSubjects);
+              localStorage.setItem('smp_subjects', JSON.stringify(fsSubjects));
+            } else {
+              console.log("Firestore 'subjects' collection is empty. Seeding initial data...");
+              for (const sb of loadedSubjects) {
+                await setDoc(doc(db, 'subjects', sb.id), sanitizeFirestoreData(sb));
+              }
+            }
+          } catch (err) {
+            console.error("Failed to load subjects from Firestore: ", err);
+          }
+
+          // 3. Fetch Teachers
+          try {
+            const teachersSnap = await getDocs(collection(db, 'teachers'));
+            if (!teachersSnap.empty) {
+              const fsTeachers: Teacher[] = [];
+              teachersSnap.forEach(docSnap => {
+                const d = docSnap.data();
+                fsTeachers.push({
+                  id: docSnap.id,
+                  nik: d.nik || docSnap.id,
+                  name: d.name || '',
+                  password: d.password || d.nik || docSnap.id,
+                  subjectsTaught: d.subjectsTaught || []
+                });
+              });
+              loadedTeachers = fsTeachers;
+              setTeachers(fsTeachers);
+              localStorage.setItem('smp_teachers', JSON.stringify(fsTeachers));
+
+              if (storedUser) {
+                const sUser = JSON.parse(storedUser);
+                if (sUser.role === 'TEACHER') {
+                  const currentTeacher = fsTeachers.find(t => t.id === sUser.id);
+                  if (currentTeacher) {
+                    const updatedUser: SessionUser = {
+                      ...sUser,
+                      name: currentTeacher.name,
+                      meta: { ...sUser.meta, nik: currentTeacher.nik }
+                    };
+                    setCurrentUser(updatedUser);
+                    localStorage.setItem('smp_current_user', JSON.stringify(updatedUser));
+                  }
+                }
+              }
+            } else {
+              console.log("Firestore 'teachers' collection is empty. Seeding...");
+              for (const tc of loadedTeachers) {
+                await setDoc(doc(db, 'teachers', tc.id), sanitizeFirestoreData(tc));
+              }
+            }
+          } catch (err) {
+            console.error("Failed to load teachers from Firestore: ", err);
+          }
+
+          // 4. Fetch Students
+          try {
+            const studentsSnap = await getDocs(collection(db, 'students'));
+            if (!studentsSnap.empty) {
+              const fsStudents: Student[] = [];
+              studentsSnap.forEach(docSnap => {
+                const d = docSnap.data();
+                fsStudents.push({
+                  id: docSnap.id,
+                  nis: d.nis || docSnap.id,
+                  name: d.name || '',
+                  classId: d.classId || '',
+                  password: d.password || d.nis || docSnap.id
+                });
+              });
+              loadedStudents = fsStudents;
+              setStudents(fsStudents);
+              localStorage.setItem('smp_students', JSON.stringify(fsStudents));
+
+              if (storedUser) {
+                const sUser = JSON.parse(storedUser);
+                if (sUser.role === 'STUDENT') {
+                  const currentStudent = fsStudents.find(s => s.id === sUser.id);
+                  if (currentStudent) {
+                    const updatedUser: SessionUser = {
+                      ...sUser,
+                      name: currentStudent.name,
+                      meta: { ...sUser.meta, nis: currentStudent.nis, classId: currentStudent.classId }
+                    };
+                    setCurrentUser(updatedUser);
+                    localStorage.setItem('smp_current_user', JSON.stringify(updatedUser));
+                  }
+                }
+              }
+            } else {
+              console.log("Firestore 'students' collection is empty. Seeding...");
+              for (const st of loadedStudents) {
+                await setDoc(doc(db, 'students', st.id), sanitizeFirestoreData(st));
+              }
+            }
+          } catch (err) {
+            console.error("Failed to load students from Firestore: ", err);
+          }
+
+          // 5. Fetch Materials
+          try {
+            const materialsSnap = await getDocs(collection(db, 'materials'));
+            if (!materialsSnap.empty) {
+              const fsMaterials: Material[] = [];
+              materialsSnap.forEach(docSnap => {
+                const d = docSnap.data();
+                fsMaterials.push({
+                  id: docSnap.id,
+                  title: d.title || '',
+                  description: d.description || '',
+                  link: d.link || '',
+                  classId: d.classId || '',
+                  subjectId: d.subjectId || '',
+                  teacherId: d.teacherId || '',
+                  createdAt: d.createdAt || ''
+                });
+              });
+              setMaterials(fsMaterials);
+              localStorage.setItem('smp_materials', JSON.stringify(fsMaterials));
+            } else {
+              console.log("Firestore 'materials' collection is empty. Seeding...");
+              for (const mt of loadedMaterials) {
+                await setDoc(doc(db, 'materials', mt.id), sanitizeFirestoreData(mt));
+              }
+            }
+          } catch (err) {
+            console.error("Failed to load materials from Firestore: ", err);
+          }
+
+          // 6. Fetch Assignments
+          try {
+            const assignmentsSnap = await getDocs(collection(db, 'assignments'));
+            if (!assignmentsSnap.empty) {
+              const fsAssignments: Assignment[] = [];
+              assignmentsSnap.forEach(docSnap => {
+                const d = docSnap.data();
+                fsAssignments.push({
+                  id: docSnap.id,
+                  title: d.title || '',
+                  description: d.description || '',
+                  dueDate: d.dueDate || '',
+                  link: d.link || '',
+                  classId: d.classId || '',
+                  subjectId: d.subjectId || '',
+                  teacherId: d.teacherId || '',
+                  formEnabled: d.formEnabled !== undefined ? d.formEnabled : true,
+                  previewEnabled: d.previewEnabled !== undefined ? d.previewEnabled : true,
+                  createdAt: d.createdAt || ''
+                });
+              });
+              setAssignments(fsAssignments);
+              localStorage.setItem('smp_assignments', JSON.stringify(fsAssignments));
+            } else {
+              console.log("Firestore 'assignments' collection is empty. Seeding...");
+              for (const as of loadedAssignments) {
+                await setDoc(doc(db, 'assignments', as.id), sanitizeFirestoreData(as));
+              }
+            }
+          } catch (err) {
+            console.error("Failed to load assignments from Firestore: ", err);
+          }
+
+          // 7. Fetch Grades
+          try {
+            const gradesSnap = await getDocs(collection(db, 'grades'));
+            if (!gradesSnap.empty) {
+              const fsGrades: Grade[] = [];
+              gradesSnap.forEach(docSnap => {
+                const d = docSnap.data();
+                fsGrades.push({
+                  id: docSnap.id,
+                  studentId: d.studentId || '',
+                  assignmentId: d.assignmentId || '',
+                  submissionLink: d.submissionLink || '',
+                  subjectId: d.subjectId || '',
+                  classId: d.classId || '',
+                  status: d.status || 'SUBMITTED',
+                  grade: d.grade,
+                  feedback: d.feedback,
+                  submittedAt: d.submittedAt || '',
+                  gradedAt: d.gradedAt
+                });
+              });
+              setGrades(fsGrades);
+              localStorage.setItem('smp_grades', JSON.stringify(fsGrades));
+            } else {
+              console.log("Firestore 'grades' collection is empty. Seeding...");
+              for (const gr of loadedGrades) {
+                await setDoc(doc(db, 'grades', gr.id), sanitizeFirestoreData(gr));
+              }
+            }
+          } catch (err) {
+            console.error("Failed to load grades from Firestore: ", err);
+          }
+
+          // 8. Fetch Admin Password Config
+          try {
+            const configSnap = await getDoc(doc(db, 'adminConfigs', 'config'));
+            if (configSnap.exists()) {
+              const adminPwdVal = configSnap.data().adminPassword;
+              if (adminPwdVal) {
+                setAdminPassword(adminPwdVal);
+                localStorage.setItem('smp_admin_pwd', adminPwdVal);
+              }
+            } else {
+              console.log("Admin config is empty in Firestore. Seeding defaults...");
+              await setDoc(doc(db, 'adminConfigs', 'config'), { adminPassword: loadedAdminPassword });
+            }
+          } catch (err) {
+            console.error("Failed to load admin config from Firestore: ", err);
+          }
+        }
+      } catch (e) {
+        console.error("General error synchronizing Firestore: ", e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initAndSync();
+  }, []);
 
   // Sync state functions helper
   const syncState = (
