@@ -8,19 +8,7 @@ import {
   Assignment, 
   Grade, 
   SessionUser,
-  UserRole
-} from '../types';
-import { 
-  INITIAL_CLASSES, 
-  INITIAL_SUBJECTS, 
-  INITIAL_TEACHERS, 
-  INITIAL_STUDENTS, 
-  INITIAL_MATERIALS, 
-  INITIAL_ASSIGNMENTS, 
-  INITIAL_GRADES 
-} from '../data/mockData';
-import { db, isFirebaseConfigured } from '../firebase';
-import { doc, setDoc, getDoc, collection, getDocs, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+} from '../types.ts';
 
 interface DbContextType {
   classes: Class[];
@@ -82,35 +70,6 @@ interface DbContextType {
 
 const DbContext = createContext<DbContextType | undefined>(undefined);
 
-enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
-
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    operationType,
-    path
-  };
-  console.error('Firestore Error Detailed: ', JSON.stringify(errInfo));
-  // Do not crash the UI, we throw error so caller can display it nice
-  throw new Error(JSON.stringify(errInfo));
-}
-
-const logFirestoreSyncError = (message: string, error: unknown) => {
-  const errStr = error instanceof Error ? error.message : String(error);
-  if (errStr.includes("offline") || errStr.includes("Failed to get document") || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-    console.warn(`${message} (Using offline-first cached database configuration): ${errStr}`);
-  } else {
-    console.error(`${message}: ${errStr}`);
-  }
-};
-
 export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [classes, setClasses] = useState<Class[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -123,449 +82,114 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Helper to remove any 'undefined' property values recursively before writing to Firestore
-  const sanitizeFirestoreData = (obj: any): any => {
-    if (obj === null || obj === undefined) return null;
-    if (Array.isArray(obj)) {
-      return obj.map(sanitizeFirestoreData);
-    }
-    if (typeof obj === 'object') {
-      const res: any = {};
-      for (const key of Object.keys(obj)) {
-        if (obj[key] !== undefined) {
-          res[key] = sanitizeFirestoreData(obj[key]);
-        }
-      }
-      return res;
-    }
-    return obj;
-  };
-
-  // Initial Load from LocalStorage & Firestore Sync
+  // Synchronous initial fetch & live synchronization polling loop
   useEffect(() => {
-    const unsubscribes: (() => void)[] = [];
+    // 1. Instantly load from localStorage for lightning-fast launch presentation state
+    const storedClasses = localStorage.getItem('smp_classes');
+    const storedSubjects = localStorage.getItem('smp_subjects');
+    const storedTeachers = localStorage.getItem('smp_teachers');
+    const storedStudents = localStorage.getItem('smp_students');
+    const storedMaterials = localStorage.getItem('smp_materials');
+    const storedAssignments = localStorage.getItem('smp_assignments');
+    const storedGrades = localStorage.getItem('smp_grades');
+    const storedAdminPassword = localStorage.getItem('smp_admin_pwd');
+    const storedUser = localStorage.getItem('smp_current_user');
 
-    const initAndSync = async () => {
+    if (storedClasses) setClasses(JSON.parse(storedClasses));
+    if (storedSubjects) setSubjects(JSON.parse(storedSubjects));
+    if (storedTeachers) setTeachers(JSON.parse(storedTeachers));
+    if (storedStudents) setStudents(JSON.parse(storedStudents));
+    if (storedMaterials) setMaterials(JSON.parse(storedMaterials));
+    if (storedAssignments) setAssignments(JSON.parse(storedAssignments));
+    if (storedGrades) setGrades(JSON.parse(storedGrades));
+    if (storedAdminPassword) setAdminPassword(storedAdminPassword);
+    if (storedUser) setCurrentUser(JSON.parse(storedUser));
+
+    // If local state is empty, keep loading indicator until at least first background query finishes
+    if (!storedClasses && !storedSubjects && !storedTeachers) {
       setIsLoading(true);
+    } else {
+      setIsLoading(false);
+    }
+
+    // 2. Fetch function to bridge live cloud relational state down to device
+    const fetchLiveData = async () => {
       try {
-        const storedClasses = localStorage.getItem('smp_classes');
-        const storedSubjects = localStorage.getItem('smp_subjects');
-        const storedTeachers = localStorage.getItem('smp_teachers');
-        const storedStudents = localStorage.getItem('smp_students');
-        const storedMaterials = localStorage.getItem('smp_materials');
-        const storedAssignments = localStorage.getItem('smp_assignments');
-        const storedGrades = localStorage.getItem('smp_grades');
-        const storedAdminPassword = localStorage.getItem('smp_admin_pwd');
-        const storedUser = localStorage.getItem('smp_current_user');
+        const response = await fetch('/api/data');
+        if (response.ok) {
+          const data = await response.json();
+          setClasses(data.classes || []);
+          setSubjects(data.subjects || []);
+          setTeachers(data.teachers || []);
+          setStudents(data.students || []);
+          setMaterials(data.materials || []);
+          setAssignments(data.assignments || []);
+          setGrades(data.grades || []);
+          setAdminPassword(data.adminPassword || 'admin123');
 
-        let loadedClasses = storedClasses ? JSON.parse(storedClasses) : INITIAL_CLASSES;
-        let loadedSubjects = storedSubjects ? JSON.parse(storedSubjects) : INITIAL_SUBJECTS;
-        let loadedTeachers = storedTeachers ? JSON.parse(storedTeachers) : INITIAL_TEACHERS;
-        let loadedStudents = storedStudents ? JSON.parse(storedStudents) : INITIAL_STUDENTS;
-        let loadedMaterials = storedMaterials ? JSON.parse(storedMaterials) : INITIAL_MATERIALS;
-        let loadedAssignments = storedAssignments ? JSON.parse(storedAssignments) : INITIAL_ASSIGNMENTS;
-        let loadedGrades = storedGrades ? JSON.parse(storedGrades) : INITIAL_GRADES;
-        let loadedAdminPassword = storedAdminPassword || 'admin123';
+          // Save current state as local standby cache
+          localStorage.setItem('smp_classes', JSON.stringify(data.classes || []));
+          localStorage.setItem('smp_subjects', JSON.stringify(data.subjects || []));
+          localStorage.setItem('smp_teachers', JSON.stringify(data.teachers || []));
+          localStorage.setItem('smp_students', JSON.stringify(data.students || []));
+          localStorage.setItem('smp_materials', JSON.stringify(data.materials || []));
+          localStorage.setItem('smp_assignments', JSON.stringify(data.assignments || []));
+          localStorage.setItem('smp_grades', JSON.stringify(data.grades || []));
+          localStorage.setItem('smp_admin_pwd', data.adminPassword || 'admin123');
 
-        if (storedUser) {
-          setCurrentUser(JSON.parse(storedUser));
+          // Align currentUser metadata if there was a modification on other screens
+          if (storedUser) {
+            const parsedUser = JSON.parse(storedUser);
+            if (parsedUser.role === 'TEACHER') {
+              const liveTeacher = (data.teachers || []).find((t: Teacher) => t.id === parsedUser.id);
+              if (liveTeacher) {
+                const updatedUser: SessionUser = {
+                  ...parsedUser,
+                  name: liveTeacher.name,
+                  meta: { ...parsedUser.meta, nik: liveTeacher.nik }
+                };
+                setCurrentUser(updatedUser);
+                localStorage.setItem('smp_current_user', JSON.stringify(updatedUser));
+              }
+            } else if (parsedUser.role === 'STUDENT') {
+              const liveStudent = (data.students || []).find((s: Student) => s.id === parsedUser.id);
+              if (liveStudent) {
+                const updatedUser: SessionUser = {
+                  ...parsedUser,
+                  name: liveStudent.name,
+                  meta: { ...parsedUser.meta, nis: liveStudent.nis, classId: liveStudent.classId }
+                };
+                setCurrentUser(updatedUser);
+                localStorage.setItem('smp_current_user', JSON.stringify(updatedUser));
+              }
+            }
+          }
         }
-
-        // Apply offline state first for immediate UI response
-        setClasses(loadedClasses);
-        setSubjects(loadedSubjects);
-        setTeachers(loadedTeachers);
-        setStudents(loadedStudents);
-        setMaterials(loadedMaterials);
-        setAssignments(loadedAssignments);
-        setGrades(loadedGrades);
-        setAdminPassword(loadedAdminPassword);
-        setIsLoading(false); // Unblock the UI instantly so the main page displays immediately without waiting for database requests
-
-        // Fetch data from Firestore to override if configured
-        if (isFirebaseConfigured && db) {
-          console.log("Initializing real-time Firestore listeners for active synchronization...");
-
-          const listenClasses = () => {
-            let isFirstRun = true;
-            const unsub = onSnapshot(collection(db, 'classes'), async (snapshot) => {
-              if (!snapshot.empty) {
-                const fsClasses: Class[] = [];
-                snapshot.forEach(docSnap => {
-                  const d = docSnap.data();
-                  fsClasses.push({
-                    id: docSnap.id,
-                    name: d.name || ''
-                  });
-                });
-                loadedClasses = fsClasses;
-                setClasses(fsClasses);
-                localStorage.setItem('smp_classes', JSON.stringify(fsClasses));
-              } else {
-                loadedClasses = [];
-                setClasses([]);
-                localStorage.setItem('smp_classes', JSON.stringify([]));
-              }
-              isFirstRun = false;
-            }, (err) => {
-              logFirestoreSyncError("Failed to listen list of classes from Firestore", err);
-            });
-            unsubscribes.push(unsub);
-          };
-
-          const listenSubjects = () => {
-            let isFirstRun = true;
-            const unsub = onSnapshot(collection(db, 'subjects'), async (snapshot) => {
-              if (!snapshot.empty) {
-                const fsSubjects: Subject[] = [];
-                snapshot.forEach(docSnap => {
-                  const d = docSnap.data();
-                  fsSubjects.push({
-                    id: docSnap.id,
-                    name: d.name || ''
-                  });
-                });
-                loadedSubjects = fsSubjects;
-                setSubjects(fsSubjects);
-                localStorage.setItem('smp_subjects', JSON.stringify(fsSubjects));
-              } else {
-                loadedSubjects = [];
-                setSubjects([]);
-                localStorage.setItem('smp_subjects', JSON.stringify([]));
-              }
-              isFirstRun = false;
-            }, (err) => {
-              logFirestoreSyncError("Failed to listen list of subjects from Firestore", err);
-            });
-            unsubscribes.push(unsub);
-          };
-
-          const listenTeachers = () => {
-            let isFirstRun = true;
-            const unsub = onSnapshot(collection(db, 'teachers'), async (snapshot) => {
-              if (!snapshot.empty) {
-                const fsTeachers: Teacher[] = [];
-                snapshot.forEach(docSnap => {
-                  const d = docSnap.data();
-                  fsTeachers.push({
-                    id: docSnap.id,
-                    nik: d.nik || docSnap.id,
-                    name: d.name || '',
-                    password: d.password || d.nik || docSnap.id,
-                    subjectsTaught: d.subjectsTaught || []
-                  });
-                });
-                loadedTeachers = fsTeachers;
-                setTeachers(fsTeachers);
-                localStorage.setItem('smp_teachers', JSON.stringify(fsTeachers));
-
-                // Sync current teacher user if details updated
-                if (storedUser) {
-                  const sUser = JSON.parse(storedUser);
-                  if (sUser.role === 'TEACHER') {
-                    const currentTeacher = fsTeachers.find(t => t.id === sUser.id);
-                    if (currentTeacher) {
-                      const updatedUser: SessionUser = {
-                        ...sUser,
-                        name: currentTeacher.name,
-                        meta: { ...sUser.meta, nik: currentTeacher.nik }
-                      };
-                      setCurrentUser(updatedUser);
-                      localStorage.setItem('smp_current_user', JSON.stringify(updatedUser));
-                    }
-                  }
-                }
-              } else {
-                if (isFirstRun) {
-                  console.log("Firestore 'teachers' collection is empty. Seeding...");
-                  for (const tc of loadedTeachers) {
-                    await setDoc(doc(db, 'teachers', tc.id), sanitizeFirestoreData(tc));
-                  }
-                } else {
-                  loadedTeachers = [];
-                  setTeachers([]);
-                  localStorage.setItem('smp_teachers', JSON.stringify([]));
-                }
-              }
-              isFirstRun = false;
-            }, (err) => {
-              logFirestoreSyncError("Failed to listen list of teachers from Firestore", err);
-            });
-            unsubscribes.push(unsub);
-          };
-
-          const listenStudents = () => {
-            let isFirstRun = true;
-            const unsub = onSnapshot(collection(db, 'students'), async (snapshot) => {
-              if (!snapshot.empty) {
-                const fsStudents: Student[] = [];
-                snapshot.forEach(docSnap => {
-                  const d = docSnap.data();
-                  fsStudents.push({
-                    id: docSnap.id,
-                    nis: d.nis || docSnap.id,
-                    name: d.name || '',
-                    classId: d.classId || '',
-                    password: d.password || d.nis || docSnap.id
-                  });
-                });
-                loadedStudents = fsStudents;
-                setStudents(fsStudents);
-                localStorage.setItem('smp_students', JSON.stringify(fsStudents));
-
-                // Sync current student user if details updated
-                if (storedUser) {
-                  const sUser = JSON.parse(storedUser);
-                  if (sUser.role === 'STUDENT') {
-                    const currentStudent = fsStudents.find(s => s.id === sUser.id);
-                    if (currentStudent) {
-                      const updatedUser: SessionUser = {
-                        ...sUser,
-                        name: currentStudent.name,
-                        meta: { ...sUser.meta, nis: currentStudent.nis, classId: currentStudent.classId }
-                      };
-                      setCurrentUser(updatedUser);
-                      localStorage.setItem('smp_current_user', JSON.stringify(updatedUser));
-                    }
-                  }
-                }
-              } else {
-                if (isFirstRun) {
-                  console.log("Firestore 'students' collection is empty. Seeding...");
-                  for (const st of loadedStudents) {
-                    await setDoc(doc(db, 'students', st.id), sanitizeFirestoreData(st));
-                  }
-                } else {
-                  loadedStudents = [];
-                  setStudents([]);
-                  localStorage.setItem('smp_students', JSON.stringify([]));
-                }
-              }
-              isFirstRun = false;
-            }, (err) => {
-              logFirestoreSyncError("Failed to listen list of students from Firestore", err);
-            });
-            unsubscribes.push(unsub);
-          };
-
-          const listenMaterials = () => {
-            let isFirstRun = true;
-            const unsub = onSnapshot(collection(db, 'materials'), async (snapshot) => {
-              if (!snapshot.empty) {
-                const fsMaterials: Material[] = [];
-                snapshot.forEach(docSnap => {
-                  const d = docSnap.data();
-                  fsMaterials.push({
-                    id: docSnap.id,
-                    title: d.title || '',
-                    description: d.description || '',
-                    link: d.link || '',
-                    classId: d.classId || '',
-                    subjectId: d.subjectId || '',
-                    teacherId: d.teacherId || '',
-                    createdAt: d.createdAt || ''
-                  });
-                });
-                setMaterials(fsMaterials);
-                localStorage.setItem('smp_materials', JSON.stringify(fsMaterials));
-              } else {
-                setMaterials([]);
-                localStorage.setItem('smp_materials', JSON.stringify([]));
-              }
-              isFirstRun = false;
-            }, (err) => {
-              logFirestoreSyncError("Failed to listen list of materials from Firestore", err);
-            });
-            unsubscribes.push(unsub);
-          };
-
-          const listenAssignments = () => {
-            let isFirstRun = true;
-            const unsub = onSnapshot(collection(db, 'assignments'), async (snapshot) => {
-              if (!snapshot.empty) {
-                const fsAssignments: Assignment[] = [];
-                snapshot.forEach(docSnap => {
-                  const d = docSnap.data();
-                  fsAssignments.push({
-                    id: docSnap.id,
-                    title: d.title || '',
-                    description: d.description || '',
-                    dueDate: d.dueDate || '',
-                    link: d.link || '',
-                    classId: d.classId || '',
-                    subjectId: d.subjectId || '',
-                    teacherId: d.teacherId || '',
-                    formEnabled: d.formEnabled !== undefined ? d.formEnabled : true,
-                    previewEnabled: d.previewEnabled !== undefined ? d.previewEnabled : true,
-                    createdAt: d.createdAt || ''
-                  });
-                });
-                setAssignments(fsAssignments);
-                localStorage.setItem('smp_assignments', JSON.stringify(fsAssignments));
-              } else {
-                setAssignments([]);
-                localStorage.setItem('smp_assignments', JSON.stringify([]));
-              }
-              isFirstRun = false;
-            }, (err) => {
-              logFirestoreSyncError("Failed to listen list of assignments from Firestore", err);
-            });
-            unsubscribes.push(unsub);
-          };
-
-          const listenGrades = () => {
-            let isFirstRun = true;
-            const unsub = onSnapshot(collection(db, 'grades'), async (snapshot) => {
-              if (!snapshot.empty) {
-                const fsGrades: Grade[] = [];
-                snapshot.forEach(docSnap => {
-                  const d = docSnap.data();
-                  fsGrades.push({
-                    id: docSnap.id,
-                    studentId: d.studentId || '',
-                    assignmentId: d.assignmentId || '',
-                    submissionLink: d.submissionLink || '',
-                    subjectId: d.subjectId || '',
-                    classId: d.classId || '',
-                    status: d.status || 'SUBMITTED',
-                    grade: d.grade,
-                    feedback: d.feedback,
-                    submittedAt: d.submittedAt || '',
-                    gradedAt: d.gradedAt
-                  });
-                });
-                setGrades(fsGrades);
-                localStorage.setItem('smp_grades', JSON.stringify(fsGrades));
-              } else {
-                setGrades([]);
-                localStorage.setItem('smp_grades', JSON.stringify([]));
-              }
-              isFirstRun = false;
-            }, (err) => {
-              logFirestoreSyncError("Failed to listen list of grades from Firestore", err);
-            });
-            unsubscribes.push(unsub);
-          };
-
-          const listenAdminConfig = () => {
-            let isFirstRun = true;
-            const unsub = onSnapshot(doc(db, 'adminConfigs', 'config'), async (docSnap) => {
-              if (docSnap.exists()) {
-                const adminPwdVal = docSnap.data().adminPassword;
-                if (adminPwdVal) {
-                  setAdminPassword(adminPwdVal);
-                  localStorage.setItem('smp_admin_pwd', adminPwdVal);
-                }
-              } else if (isFirstRun) {
-                console.log("Admin config is empty in Firestore. Seeding defaults...");
-                await setDoc(doc(db, 'adminConfigs', 'config'), { adminPassword: loadedAdminPassword });
-              }
-              isFirstRun = false;
-            }, (err) => {
-              logFirestoreSyncError("Failed to listen admin config config from Firestore", err);
-            });
-            unsubscribes.push(unsub);
-          };
-
-          listenClasses();
-          listenSubjects();
-          listenTeachers();
-          listenStudents();
-          listenMaterials();
-          listenAssignments();
-          listenGrades();
-          listenAdminConfig();
-        }
-      } catch (e) {
-        logFirestoreSyncError("General error synchronizing Firestore", e);
+      } catch (error) {
+        console.warn("Offline or background REST server data sync failed:", error);
       } finally {
         setIsLoading(false);
       }
     };
 
-    initAndSync();
+    fetchLiveData();
+
+    // Set stable micro-polling sync timer (every 5 seconds) to ensure multi-screen coherence
+    const pollingInterval = setInterval(fetchLiveData, 5000);
 
     return () => {
-      unsubscribes.forEach(unsub => unsub());
+      clearInterval(pollingInterval);
     };
   }, []);
-
-  // Sync state functions helper
-  const syncState = (
-    key: string, 
-    data: any, 
-    firebaseCollection?: string, 
-    docId?: string
-  ) => {
-    localStorage.setItem(key, JSON.stringify(data));
-    
-    // Sync to Firestore if configured
-    if (isFirebaseConfigured && db && firebaseCollection && docId) {
-      try {
-        const docRef = doc(db, firebaseCollection, docId);
-        
-        let docData = data;
-        if (Array.isArray(data)) {
-          // Find the specific item matching docId in the collection array
-          const item = data.find((x: any) => x && (x.id === docId || x.nis === docId || x.nik === docId));
-          if (item) {
-            docData = { ...item };
-          } else {
-            console.warn(`Could not find item with ID ${docId} in array for collection ${firebaseCollection}`);
-            return;
-          }
-        }
-
-        setDoc(docRef, sanitizeFirestoreData(docData))
-          .catch(err => {
-            console.warn(`Firestore sync failed for ${firebaseCollection}/${docId}: `, err);
-            const errInfo = {
-              error: err instanceof Error ? err.message : String(err),
-              operationType: OperationType.WRITE,
-              path: `${firebaseCollection}/${docId}`
-            };
-            console.error('Firestore Sync Background Error: ', JSON.stringify(errInfo));
-          });
-      } catch (err) {
-        console.error(`Synchronous Firestore path/payload error for ${firebaseCollection}/${docId}: `, err);
-      }
-    }
-  };
 
   // Auth Operations
   const login = async (username: string, password: string, role: 'ADMIN' | 'TEACHER' | 'STUDENT') => {
     if (role === 'ADMIN') {
-      if (username.toLowerCase() === 'admin') {
-        // Quick local check first
-        if (password === adminPassword) {
-          const user: SessionUser = { id: 'admin', name: 'Administrator', role: 'ADMIN' };
-          setCurrentUser(user);
-          localStorage.setItem('smp_current_user', JSON.stringify(user));
-          return user;
-        }
-
-        // Fallback: Check direct from Firestore in real-time
-        if (isFirebaseConfigured && db) {
-          try {
-            console.log("Locally cached admin password check failed, fetching live admin config from Firestore...");
-            const configSnap = await getDoc(doc(db, 'adminConfigs', 'config'));
-            if (configSnap.exists()) {
-              const livePassword = configSnap.data().adminPassword;
-              if (livePassword && password === livePassword) {
-                // Synchronize local cache and state instantly
-                setAdminPassword(livePassword);
-                localStorage.setItem('smp_admin_pwd', livePassword);
-
-                const user: SessionUser = { id: 'admin', name: 'Administrator', role: 'ADMIN' };
-                setCurrentUser(user);
-                localStorage.setItem('smp_current_user', JSON.stringify(user));
-                return user;
-              }
-            }
-          } catch (err) {
-            logFirestoreSyncError("Real-time admin config fallback check failed", err);
-          }
-        }
+      if (username.toLowerCase() === 'admin' && password === adminPassword) {
+        const user: SessionUser = { id: 'admin', name: 'Administrator', role: 'ADMIN' };
+        setCurrentUser(user);
+        localStorage.setItem('smp_current_user', JSON.stringify(user));
+        return user;
       }
       throw new Error('Username Admin salah atau Password salah.');
     }
@@ -578,40 +202,6 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         localStorage.setItem('smp_current_user', JSON.stringify(user));
         return user;
       }
-
-      // Fallback: Check teachers in Firestore
-      if (isFirebaseConfigured && db) {
-        try {
-          console.log("Cached teacher credential check failed, fetching live teacher list from Firestore...");
-          const teachersSnap = await getDocs(collection(db, 'teachers'));
-          if (!teachersSnap.empty) {
-            const fsTeachers: Teacher[] = [];
-            teachersSnap.forEach(docSnap => {
-              const d = docSnap.data();
-              fsTeachers.push({
-                id: docSnap.id,
-                nik: d.nik || docSnap.id,
-                name: d.name || '',
-                password: d.password || d.nik || docSnap.id,
-                subjectsTaught: d.subjectsTaught || []
-              });
-            });
-            // Update state and local storage
-            setTeachers(fsTeachers);
-            localStorage.setItem('smp_teachers', JSON.stringify(fsTeachers));
-
-            const liveTeacher = fsTeachers.find(t => t.nik === username);
-            if (liveTeacher && liveTeacher.password === password) {
-              const user: SessionUser = { id: liveTeacher.id, name: liveTeacher.name, role: 'TEACHER', meta: { nik: liveTeacher.nik } };
-              setCurrentUser(user);
-              localStorage.setItem('smp_current_user', JSON.stringify(user));
-              return user;
-            }
-          }
-        } catch (err) {
-          logFirestoreSyncError("Real-time teacher login lookup failed", err);
-        }
-      }
       throw new Error('NIK atau Password Guru salah.');
     }
 
@@ -622,40 +212,6 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         setCurrentUser(user);
         localStorage.setItem('smp_current_user', JSON.stringify(user));
         return user;
-      }
-
-      // Fallback: Check students in Firestore
-      if (isFirebaseConfigured && db) {
-        try {
-          console.log("Cached student credential check failed, fetching live student list from Firestore...");
-          const studentsSnap = await getDocs(collection(db, 'students'));
-          if (!studentsSnap.empty) {
-            const fsStudents: Student[] = [];
-            studentsSnap.forEach(docSnap => {
-              const d = docSnap.data();
-              fsStudents.push({
-                id: docSnap.id,
-                nis: d.nis || docSnap.id,
-                name: d.name || '',
-                classId: d.classId || '',
-                password: d.password || d.nis || docSnap.id
-              });
-            });
-            // Update state and local storage
-            setStudents(fsStudents);
-            localStorage.setItem('smp_students', JSON.stringify(fsStudents));
-
-            const liveStudent = fsStudents.find(s => s.nis === username);
-            if (liveStudent && liveStudent.password === password) {
-              const user: SessionUser = { id: liveStudent.id, name: liveStudent.name, role: 'STUDENT', meta: { nis: liveStudent.nis, classId: liveStudent.classId } };
-              setCurrentUser(user);
-              localStorage.setItem('smp_current_user', JSON.stringify(user));
-              return user;
-            }
-          }
-        } catch (err) {
-          logFirestoreSyncError("Real-time student login lookup failed", err);
-        }
       }
       throw new Error('NIS atau Password Siswa salah.');
     }
@@ -671,40 +227,46 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const updateAdminPassword = (newPassword: string) => {
     setAdminPassword(newPassword);
     localStorage.setItem('smp_admin_pwd', newPassword);
-    
-    // Full backup trigger
-    if (isFirebaseConfigured && db) {
-      try {
-        setDoc(doc(db, 'adminConfigs', 'config'), { adminPassword: newPassword })
-          .catch(err => {
-            console.warn("Firestore sync failed for adminConfigs/config: ", err);
-          });
-      } catch (err) {
-        console.error("Synchronous Firestore error for adminConfigs/config: ", err);
-      }
-    }
+
+    fetch('/api/admin/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adminPassword: newPassword })
+    }).catch(err => console.error("Error updating admin password:", err));
   };
 
   const updateTeacherPassword = (nik: string, newPassword: string) => {
     const updated = teachers.map(t => {
       if (t.nik === nik) {
-        return { ...t, password: newPassword };
+        const teacherUpdated = { ...t, password: newPassword };
+        fetch(`/api/teachers/${t.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: newPassword }),
+        }).catch(err => console.error("Error updating teacher password:", err));
+        return teacherUpdated;
       }
       return t;
     });
     setTeachers(updated);
-    syncState('smp_teachers', updated, 'teachers', nik);
+    localStorage.setItem('smp_teachers', JSON.stringify(updated));
   };
 
   const updateStudentPassword = (nis: string, newPassword: string) => {
     const updated = students.map(s => {
       if (s.nis === nis) {
-        return { ...s, password: newPassword };
+        const studentUpdated = { ...s, password: newPassword };
+        fetch(`/api/students/${s.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: newPassword }),
+        }).catch(err => console.error("Error updating student password:", err));
+        return studentUpdated;
       }
       return s;
     });
     setStudents(updated);
-    syncState('smp_students', updated, 'students', nis);
+    localStorage.setItem('smp_students', JSON.stringify(updated));
   };
 
   // Manage Classes
@@ -715,28 +277,37 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     };
     const updated = [...classes, newClass];
     setClasses(updated);
-    syncState('smp_classes', updated, 'classes', newClass.id);
+    localStorage.setItem('smp_classes', JSON.stringify(updated));
+
+    fetch('/api/classes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newClass)
+    }).catch(err => console.error("Error adding class:", err));
+
     return newClass;
   };
 
   const editClass = (id: string, name: string) => {
     const updated = classes.map(c => c.id === id ? { ...c, name: name.trim() } : c);
     setClasses(updated);
-    syncState('smp_classes', updated, 'classes', id);
+    localStorage.setItem('smp_classes', JSON.stringify(updated));
+
+    fetch(`/api/classes/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim() })
+    }).catch(err => console.error("Error editing class:", err));
   };
 
   const deleteClass = (id: string) => {
     const updated = classes.filter(c => c.id !== id);
     setClasses(updated);
     localStorage.setItem('smp_classes', JSON.stringify(updated));
-    if (isFirebaseConfigured && db) {
-      try {
-        deleteDoc(doc(db, 'classes', id))
-          .catch(err => console.warn(`Firestore delete failed for classes/${id}: `, err));
-      } catch (err) {
-        console.error(`Synchronous Firestore delete error for classes/${id}: `, err);
-      }
-    }
+
+    fetch(`/api/classes/${id}`, {
+      method: 'DELETE'
+    }).catch(err => console.error("Error deleting class:", err));
   };
 
   // Manage Subjects
@@ -747,28 +318,37 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     };
     const updated = [...subjects, newSub];
     setSubjects(updated);
-    syncState('smp_subjects', updated, 'subjects', newSub.id);
+    localStorage.setItem('smp_subjects', JSON.stringify(updated));
+
+    fetch('/api/subjects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newSub)
+    }).catch(err => console.error("Error adding subject:", err));
+
     return newSub;
   };
 
   const editSubject = (id: string, name: string) => {
     const updated = subjects.map(s => s.id === id ? { ...s, name: name.trim() } : s);
     setSubjects(updated);
-    syncState('smp_subjects', updated, 'subjects', id);
+    localStorage.setItem('smp_subjects', JSON.stringify(updated));
+
+    fetch(`/api/subjects/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim() })
+    }).catch(err => console.error("Error editing subject:", err));
   };
 
   const deleteSubject = (id: string) => {
     const updated = subjects.filter(s => s.id !== id);
     setSubjects(updated);
     localStorage.setItem('smp_subjects', JSON.stringify(updated));
-    if (isFirebaseConfigured && db) {
-      try {
-        deleteDoc(doc(db, 'subjects', id))
-          .catch(err => console.warn(`Firestore delete failed for subjects/${id}: `, err));
-      } catch (err) {
-        console.error(`Synchronous Firestore delete error for subjects/${id}: `, err);
-      }
-    }
+
+    fetch(`/api/subjects/${id}`, {
+      method: 'DELETE'
+    }).catch(err => console.error("Error deleting subject:", err));
   };
 
   // Manage Teachers
@@ -782,38 +362,51 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     };
     const updated = [...teachers, newTeacher];
     setTeachers(updated);
-    syncState('smp_teachers', updated, 'teachers', newTeacher.id);
+    localStorage.setItem('smp_teachers', JSON.stringify(updated));
+
+    fetch('/api/teachers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newTeacher)
+    }).catch(err => console.error("Error adding teacher:", err));
+
     return newTeacher;
   };
 
   const editTeacher = (id: string, name: string, subjectsTaught: any[], password?: string) => {
     const updated = teachers.map(t => {
       if (t.id === id) {
-        return { 
+        const updatedT = { 
           ...t, 
           name: name.trim(), 
           subjectsTaught,
           password: password && password.trim() ? password.trim() : t.password
         };
+        fetch(`/api/teachers/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            name: name.trim(), 
+            subjectsTaught,
+            password: password && password.trim() ? password.trim() : t.password 
+          })
+        }).catch(err => console.error("Error editing teacher:", err));
+        return updatedT;
       }
       return t;
     });
     setTeachers(updated);
-    syncState('smp_teachers', updated, 'teachers', id);
+    localStorage.setItem('smp_teachers', JSON.stringify(updated));
   };
 
   const deleteTeacher = (id: string) => {
     const updated = teachers.filter(t => t.id !== id);
     setTeachers(updated);
     localStorage.setItem('smp_teachers', JSON.stringify(updated));
-    if (isFirebaseConfigured && db) {
-      try {
-        deleteDoc(doc(db, 'teachers', id))
-          .catch(err => console.warn(`Firestore delete failed for teachers/${id}: `, err));
-      } catch (err) {
-        console.error(`Synchronous Firestore delete error for teachers/${id}: `, err);
-      }
-    }
+
+    fetch(`/api/teachers/${id}`, {
+      method: 'DELETE'
+    }).catch(err => console.error("Error deleting teacher:", err));
   };
 
   // Manage Students
@@ -827,8 +420,51 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     };
     const updated = [...students, newStudent];
     setStudents(updated);
-    syncState('smp_students', updated, 'students', newStudent.id);
+    localStorage.setItem('smp_students', JSON.stringify(updated));
+
+    fetch('/api/students', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newStudent)
+    }).catch(err => console.error("Error adding student:", err));
+
     return newStudent;
+  };
+
+  const editStudent = (id: string, name: string, classId: string, password?: string) => {
+    const updated = students.map(s => {
+      if (s.id === id) {
+        const updatedS = { 
+          ...s, 
+          name: name.trim(), 
+          classId,
+          password: password && password.trim() ? password.trim() : s.password
+        };
+        fetch(`/api/students/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            name: name.trim(), 
+            classId,
+            password: password && password.trim() ? password.trim() : s.password 
+          })
+        }).catch(err => console.error("Error editing student:", err));
+        return updatedS;
+      }
+      return s;
+    });
+    setStudents(updated);
+    localStorage.setItem('smp_students', JSON.stringify(updated));
+  };
+
+  const deleteStudent = (id: string) => {
+    const updated = students.filter(s => s.id !== id);
+    setStudents(updated);
+    localStorage.setItem('smp_students', JSON.stringify(updated));
+
+    fetch(`/api/students/${id}`, {
+      method: 'DELETE'
+    }).catch(err => console.error("Error deleting student:", err));
   };
 
   const importStudentsBulk = async (
@@ -896,74 +532,30 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       }
     });
 
-    if (newClassesToCreate.length > 0) {
-      setClasses(currentClasses);
-      localStorage.setItem('smp_classes', JSON.stringify(currentClasses));
-      
-      // Sync setiap kelas baru ke Firestore
-      if (isFirebaseConfigured && db) {
-        await Promise.all(
-          newClassesToCreate.map(async (cls) => {
-            const docRef = doc(db, 'classes', cls.id);
-            await setDoc(docRef, cls, { merge: true }).catch(err => {
-              console.warn(`Firestore sync failed for classes/${cls.id}: `, err);
-            });
-          })
-        );
+    if (newClassesToCreate.length > 0 || newStudentsToCreate.length > 0) {
+      if (newClassesToCreate.length > 0) {
+        setClasses(currentClasses);
+        localStorage.setItem('smp_classes', JSON.stringify(currentClasses));
       }
-    }
+      if (newStudentsToCreate.length > 0) {
+        setStudents(currentStudents);
+        localStorage.setItem('smp_students', JSON.stringify(currentStudents));
+      }
 
-    if (newStudentsToCreate.length > 0) {
-      setStudents(currentStudents);
-      localStorage.setItem('smp_students', JSON.stringify(currentStudents));
-      
-      // Sync setiap siswa baru ke Firestore
-      if (isFirebaseConfigured && db) {
-        await Promise.all(
-          newStudentsToCreate.map(async (std) => {
-            const docRef = doc(db, 'students', std.id);
-            await setDoc(docRef, std, { merge: true }).catch(err => {
-              console.warn(`Firestore sync failed for students/${std.id}: `, err);
-            });
-          })
-        );
-      }
+      await fetch('/api/students/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          classes: newClassesToCreate,
+          students: newStudentsToCreate
+        })
+      }).catch(err => console.error("Error bulk uploading students/classes:", err));
     }
 
     return {
       addedStudents: newStudentsToCreate.length,
       addedClasses: newClassesToCreate.length
     };
-  };
-
-  const editStudent = (id: string, name: string, classId: string, password?: string) => {
-    const updated = students.map(s => {
-      if (s.id === id) {
-        return { 
-          ...s, 
-          name: name.trim(), 
-          classId,
-          password: password && password.trim() ? password.trim() : s.password
-        };
-      }
-      return s;
-    });
-    setStudents(updated);
-    syncState('smp_students', updated, 'students', id);
-  };
-
-  const deleteStudent = (id: string) => {
-    const updated = students.filter(s => s.id !== id);
-    setStudents(updated);
-    localStorage.setItem('smp_students', JSON.stringify(updated));
-    if (isFirebaseConfigured && db) {
-      try {
-        deleteDoc(doc(db, 'students', id))
-          .catch(err => console.warn(`Firestore delete failed for students/${id}: `, err));
-      } catch (err) {
-        console.error(`Synchronous Firestore delete error for students/${id}: `, err);
-      }
-    }
   };
 
   // Materials CRUD
@@ -987,7 +579,14 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     };
     const updated = [...materials, newMat];
     setMaterials(updated);
-    syncState('smp_materials', updated, 'materials', newMat.id);
+    localStorage.setItem('smp_materials', JSON.stringify(updated));
+
+    fetch('/api/materials', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newMat)
+    }).catch(err => console.error("Error adding material:", err));
+
     return newMat;
   };
 
@@ -1001,7 +600,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   ) => {
     const updated = materials.map(m => {
       if (m.id === id) {
-        return { 
+        const updatedM = { 
           ...m, 
           title: title.trim(), 
           description: description.trim(), 
@@ -1009,25 +608,33 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           classId, 
           subjectId 
         };
+        fetch(`/api/materials/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            title: title.trim(), 
+            description: description.trim(), 
+            link: link.trim(), 
+            classId, 
+            subjectId 
+          })
+        }).catch(err => console.error("Error editing material:", err));
+        return updatedM;
       }
       return m;
     });
     setMaterials(updated);
-    syncState('smp_materials', updated, 'materials', id);
+    localStorage.setItem('smp_materials', JSON.stringify(updated));
   };
 
   const deleteMaterial = (id: string) => {
     const updated = materials.filter(m => m.id !== id);
     setMaterials(updated);
     localStorage.setItem('smp_materials', JSON.stringify(updated));
-    if (isFirebaseConfigured && db) {
-      try {
-        deleteDoc(doc(db, 'materials', id))
-          .catch(err => console.warn(`Firestore delete failed for materials/${id}: `, err));
-      } catch (err) {
-        console.error(`Synchronous Firestore delete error for materials/${id}: `, err);
-      }
-    }
+
+    fetch(`/api/materials/${id}`, {
+      method: 'DELETE'
+    }).catch(err => console.error("Error deleting material:", err));
   };
 
   // Assignments CRUD
@@ -1057,7 +664,14 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     };
     const updated = [...assignments, newAsg];
     setAssignments(updated);
-    syncState('smp_assignments', updated, 'assignments', newAsg.id);
+    localStorage.setItem('smp_assignments', JSON.stringify(updated));
+
+    fetch('/api/assignments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newAsg)
+    }).catch(err => console.error("Error adding assignment:", err));
+
     return newAsg;
   };
 
@@ -1074,7 +688,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   ) => {
     const updated = assignments.map(a => {
       if (a.id === id) {
-        return { 
+        const updatedA = { 
           ...a, 
           title: title.trim(), 
           description: description.trim(), 
@@ -1085,39 +699,42 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           formEnabled,
           previewEnabled: previewEnabled ?? true
         };
+        fetch(`/api/assignments/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            title: title.trim(), 
+            description: description.trim(), 
+            dueDate, 
+            link: link.trim(), 
+            classId, 
+            subjectId,
+            formEnabled,
+            previewEnabled: previewEnabled ?? true
+          })
+        }).catch(err => console.error("Error editing assignment:", err));
+        return updatedA;
       }
       return a;
     });
     setAssignments(updated);
-    syncState('smp_assignments', updated, 'assignments', id);
+    localStorage.setItem('smp_assignments', JSON.stringify(updated));
   };
 
   const deleteAssignment = (id: string) => {
     const updated = assignments.filter(a => a.id !== id);
     setAssignments(updated);
     
-    // Also remove respective grades for cleaner DB
-    const gradesToDelete = grades.filter(g => g.assignmentId === id);
+    // Also remove respective grades locally to keep sync clean
     const updatedGrades = grades.filter(g => g.assignmentId !== id);
     setGrades(updatedGrades);
 
     localStorage.setItem('smp_assignments', JSON.stringify(updated));
     localStorage.setItem('smp_grades', JSON.stringify(updatedGrades));
 
-    if (isFirebaseConfigured && db) {
-      try {
-        deleteDoc(doc(db, 'assignments', id))
-          .catch(err => console.warn(`Firestore delete failed for assignments/${id}: `, err));
-        
-        // Delete all matching grades from Firestore too
-        for (const gd of gradesToDelete) {
-          deleteDoc(doc(db, 'grades', gd.id))
-            .catch(err => console.warn(`Firestore delete failed for grades/${gd.id}: `, err));
-        }
-      } catch (err) {
-        console.error(`Synchronous Firestore delete error for assignments/grades: `, err);
-      }
-    }
+    fetch(`/api/assignments/${id}`, {
+      method: 'DELETE'
+    }).catch(err => console.error("Error deleting assignment:", err));
   };
 
   // Student Actions: Submission of assignments
@@ -1136,8 +753,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       assignmentId,
       subjectId,
       classId,
-      grade: undefined,
-      feedback: undefined,
+      grade: existingIndex >= 0 ? grades[existingIndex].grade : undefined,
+      feedback: existingIndex >= 0 ? grades[existingIndex].feedback : undefined,
       submissionLink: submissionLink.trim(),
       status: 'SUBMITTED',
       submittedAt: new Date().toISOString()
@@ -1151,7 +768,14 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     }
     
     setGrades(updated);
-    syncState('smp_grades', updated, 'grades', submittedGrade.id);
+    localStorage.setItem('smp_grades', JSON.stringify(updated));
+
+    fetch('/api/grades', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(submittedGrade)
+    }).catch(err => console.error("Error submitting assignment grade data:", err));
+
     return submittedGrade;
   };
 
@@ -1159,25 +783,36 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const gradeAssignment = (gradeId: string, gradeValue: number, feedback: string) => {
     const updated = grades.map(g => {
       if (g.id === gradeId) {
-        return {
+        const updatedG = {
           ...g,
           grade: gradeValue,
           feedback: feedback.trim(),
           status: 'GRADED' as const,
           gradedAt: new Date().toISOString()
         };
+        fetch(`/api/grades/${gradeId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            grade: gradeValue,
+            feedback: feedback.trim(),
+            status: 'GRADED',
+            gradedAt: updatedG.gradedAt
+          })
+        }).catch(err => console.error("Error grading assignment:", err));
+        return updatedG;
       }
       return g;
     });
     setGrades(updated);
-    syncState('smp_grades', updated, 'grades', gradeId);
+    localStorage.setItem('smp_grades', JSON.stringify(updated));
   };
 
   // Teacher Action: Reset grade so student can submit / do again
   const resetAssignmentValue = (gradeId: string) => {
     const updated = grades.map(g => {
       if (g.id === gradeId) {
-        return {
+        const updatedG: Grade = {
           ...g,
           grade: undefined,
           feedback: undefined,
@@ -1186,11 +821,24 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           submittedAt: undefined,
           gradedAt: undefined
         };
+        fetch(`/api/grades/${gradeId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            grade: null,
+            feedback: null,
+            submissionLink: null,
+            status: 'RESET',
+            submittedAt: null,
+            gradedAt: null
+          })
+        }).catch(err => console.error("Error resetting assignment grade:", err));
+        return updatedG;
       }
       return g;
     });
     setGrades(updated);
-    syncState('smp_grades', updated, 'grades', gradeId);
+    localStorage.setItem('smp_grades', JSON.stringify(updated));
   };
 
   return (
