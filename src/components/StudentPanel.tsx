@@ -37,7 +37,7 @@ export default function StudentPanel() {
 
   // Identify Student profile
   const currentStudent = students.find(s => s.id === currentUser?.id);
-  const studentClassId = currentStudent?.classId || '';
+  const studentClassId = currentStudent?.classId || currentUser?.meta?.classId || '';
   const classNameStr = classes.find(c => c.id === studentClassId)?.name || studentClassId;
 
   // State
@@ -174,9 +174,13 @@ export default function StudentPanel() {
     }
 
     // Canva
-    const canvaMatch = url.match(/canva\.com\/design\/([a-zA-Z0-9_-]+)/);
-    if (canvaMatch) {
-      return `https://www.canva.com/design/${canvaMatch[1]}/view?embed`;
+    if (url.includes('canva.com/design/')) {
+      const urlWithoutQuery = url.split('?')[0].split('#')[0];
+      const match = urlWithoutQuery.match(/canva\.com\/design\/(.+)$/);
+      if (match && match[1]) {
+        const cleaned = match[1].replace(/\/(view|watch|edit|play|show)\/?$/, "");
+        return `https://www.canva.com/design/${cleaned}/view?embed`;
+      }
     }
 
     return null;

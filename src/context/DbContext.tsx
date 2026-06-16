@@ -1156,6 +1156,12 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     subjectId: string, 
     classId: string
   ) => {
+    // Resolve classId robustly if empty!
+    let resolvedClassId = classId;
+    if (!resolvedClassId && currentUser?.role === 'STUDENT') {
+      resolvedClassId = currentUser.meta?.classId || '';
+    }
+
     const existingIndex = grades.findIndex(g => g.studentId === studentId && g.assignmentId === assignmentId);
     
     const submittedGrade: Grade = {
@@ -1163,7 +1169,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       studentId,
       assignmentId,
       subjectId,
-      classId,
+      classId: resolvedClassId,
       grade: existingIndex >= 0 ? grades[existingIndex].grade : undefined,
       feedback: existingIndex >= 0 ? grades[existingIndex].feedback : undefined,
       submissionLink: submissionLink.trim(),
@@ -1181,7 +1187,18 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     setGrades(updated);
     localStorage.setItem('smp_grades', JSON.stringify(updated));
 
-    setDoc(doc(db, 'grades', submittedGrade.id), submittedGrade, { merge: true })
+    // Prune undefined properties to solve "Unsupported field value: undefined" error in Firestore
+    const cleanDocPayload = (obj: any): any => {
+      const clean: any = {};
+      Object.keys(obj).forEach(key => {
+        if (obj[key] !== undefined) {
+          clean[key] = obj[key];
+        }
+      });
+      return clean;
+    };
+
+    setDoc(doc(db, 'grades', submittedGrade.id), cleanDocPayload(submittedGrade), { merge: true })
       .catch(err => handleFirestoreError(err, OperationType.WRITE, `grades/${submittedGrade.id}`));
 
     return submittedGrade;
