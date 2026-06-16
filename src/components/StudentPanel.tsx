@@ -559,7 +559,7 @@ export default function StudentPanel() {
 
         {/* TAB 4: NILAI SAYA */}
         {activeTab === 'nilai' && (
-          <div className="space-y-5 max-w-4xl">
+          <div className="space-y-5">
             {(() => {
               const gradedAssignments = studentAssignments.filter(a => {
                 const grd = grades.find(g => g.studentId === currentUser?.id && g.assignmentId === a.id);
@@ -695,41 +695,47 @@ export default function StudentPanel() {
                           <div 
                             key={a.id} 
                             id={`grade-card-${a.id}`}
-                            className={`p-4 rounded-xl border border-slate-100 shadow-3xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all hover:border-slate-200 border-l-4 ${statusColor} ${rowBg}`}
+                            className={`p-5 rounded-2xl border border-slate-200/80 shadow-3xs flex flex-col md:flex-row md:items-start justify-between gap-6 transition-all hover:border-slate-300 hover:shadow-2xs border-l-4 ${statusColor} ${rowBg}`}
                           >
-                            <div className="flex-1 min-w-0 space-y-1.5 text-left">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-[8.5px] font-black tracking-widest text-teal-800 bg-teal-50 px-2 py-0.5 rounded-sm uppercase">
+                            <div className="flex-1 min-w-0 space-y-3.5 text-left">
+                              {/* Top Meta Line: Subject, Teacher & Due Date */}
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-slate-450 font-bold">
+                                <span className="text-[9px] font-black tracking-widest text-teal-850 bg-teal-50 border border-teal-100 px-2.5 py-0.5 rounded-sm uppercase font-mono">
                                   {subObj?.name || 'Mata Pelajaran'}
                                 </span>
-                                <span className="text-[10px] text-slate-400 font-semibold">
-                                  Oleh: <span className="text-slate-650">{teacherObj?.name || 'Guru'}</span>
+                                <span className="text-slate-300 hidden md:inline">•</span>
+                                <span className="flex items-center gap-1">
+                                  Oleh: <span className="text-slate-650 font-bold">{teacherObj?.name || 'Guru'}</span>
                                 </span>
                                 {a.dueDate && (
-                                  <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
-                                    • Tenggat: {a.dueDate}
-                                  </span>
+                                  <>
+                                    <span className="text-slate-300 hidden md:inline">•</span>
+                                    <span className="flex items-center gap-1">
+                                      Tenggat: <span className="text-slate-600 font-bold">{a.dueDate}</span>
+                                    </span>
+                                  </>
                                 )}
                               </div>
                               
-                              <h4 className="font-extrabold text-slate-800 text-sm tracking-tight leading-snug">
+                              {/* Assignment Title */}
+                              <h4 className="font-extrabold text-slate-800 text-base md:text-lg tracking-tight leading-snug">
                                 {a.title}
                               </h4>
 
                               {/* Beautiful micro bubble callback feedback */}
                               {grd && grd.feedback && (
-                                <div className="mt-2 bg-slate-50/80 border border-slate-100 p-2.5 rounded-lg text-left max-w-xl">
-                                  <span className="block text-[8px] font-black text-slate-450 uppercase tracking-widest mb-0.5">Ulasan Guru</span>
-                                  <p className="text-[10px] text-slate-600 leading-normal italic font-medium">"{grd.feedback}"</p>
+                                <div className="mt-3 bg-slate-50 border border-slate-100 p-3 rounded-lg text-left max-w-xl">
+                                  <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Ulasan Guru</span>
+                                  <p className="text-xs text-slate-650 leading-relaxed font-semibold italic">"{grd.feedback}"</p>
                                 </div>
                               )}
                             </div>
 
                             {/* Status badge and elegant grade scores */}
-                            <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-t-0 border-slate-100 pt-3 md:pt-0 shrink-0">
+                            <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-4 border-t md:border-t-0 border-slate-100 pt-3.5 md:pt-0 md:pl-6 md:border-l md:border-slate-100 shrink-0 min-w-[140px]">
                               <div className="text-left md:text-right">
                                 <span className="block md:hidden text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Status</span>
-                                <span className={`inline-flex items-center gap-1.5 text-[9.5px] font-black px-2.5 py-1 rounded-full border ${
+                                <span className={`inline-flex items-center gap-1.5 text-[9.5px] font-black px-3 py-1 rounded-full border ${
                                   !grd || grd.status === 'NOT_SUBMITTED' ? 'bg-slate-50 text-slate-500 border-slate-200/50' :
                                   grd.status === 'SUBMITTED' ? 'bg-amber-50 text-amber-700 border-amber-200/40' :
                                   grd.status === 'GRADED' ? 'bg-teal-50 text-teal-700 border-teal-200/40' : 'bg-rose-50 text-rose-600 border-rose-200/40'
@@ -745,15 +751,15 @@ export default function StudentPanel() {
                                 </span>
                               </div>
 
-                              <div className="text-right flex flex-col items-end justify-center min-w-[65px]">
+                              <div className="text-right flex flex-col items-end justify-center">
                                 <span className="block md:hidden text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nilai</span>
                                 {hasGrade ? (
                                   <div className="flex items-baseline justify-end">
-                                    <span className="text-2xl font-black text-teal-600 font-mono tracking-tight">{grd.grade}</span>
-                                    <span className="text-[10px] text-slate-400 font-bold font-mono">/100</span>
+                                    <span className="text-3xl font-black text-teal-600 font-mono tracking-tight">{grd.grade}</span>
+                                    <span className="text-[11px] text-slate-400 font-bold font-mono">/100</span>
                                   </div>
                                 ) : (
-                                  <span className="text-[11px] text-slate-400 font-semibold italic">--</span>
+                                  <span className="text-sm text-slate-350 font-bold font-mono">-- / 100</span>
                                 )}
                               </div>
                             </div>

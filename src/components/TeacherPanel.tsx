@@ -1414,7 +1414,7 @@ export default function TeacherPanel() {
                   {/* KOP LAPORAN */}
                   <div className="text-center space-y-2 border-b-2 border-slate-900 pb-5">
                     <h2 className="text-lg font-black tracking-widest text-slate-900 uppercase">DAFTAR NILAI DAN KETUNTASAN BELAJAR SISWA</h2>
-                    <p className="text-2xs text-slate-400 tracking-wider font-bold">MUTIARA ISLAMIC SCHOOL & LEARNING PORTAL</p>
+                    <p className="text-2xs text-teal-700 tracking-wider font-bold">SMP AL IRSYAD SURAKARTA</p>
                   </div>
 
                   {/* METADATA INFORMASI */}
