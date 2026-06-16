@@ -695,9 +695,9 @@ export default function StudentPanel() {
                           <div 
                             key={a.id} 
                             id={`grade-card-${a.id}`}
-                            className={`p-5 rounded-2xl border border-slate-200/80 shadow-3xs flex flex-col md:flex-row md:items-start justify-between gap-6 transition-all hover:border-slate-300 hover:shadow-2xs border-l-4 ${statusColor} ${rowBg}`}
+                            className={`p-5 rounded-2xl border border-slate-200/80 shadow-3xs flex flex-col md:flex-row md:items-center justify-between gap-6 transition-all hover:border-slate-300 hover:shadow-2xs border-l-4 ${statusColor} ${rowBg}`}
                           >
-                            <div className="flex-1 min-w-0 space-y-3.5 text-left">
+                            <div className="flex-1 min-w-0 space-y-2 text-left">
                               {/* Top Meta Line: Subject, Teacher & Due Date */}
                               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-slate-450 font-bold">
                                 <span className="text-[9px] font-black tracking-widest text-teal-850 bg-teal-50 border border-teal-100 px-2.5 py-0.5 rounded-sm uppercase font-mono">
@@ -718,18 +718,18 @@ export default function StudentPanel() {
                               </div>
                               
                               {/* Assignment Title */}
-                              <h4 className="font-extrabold text-slate-800 text-base md:text-lg tracking-tight leading-snug">
+                              <h4 className="font-extrabold text-slate-800 text-base md:text-md tracking-tight leading-snug">
                                 {a.title}
                               </h4>
-
-                              {/* Beautiful micro bubble callback feedback */}
-                              {grd && grd.feedback && (
-                                <div className="mt-3 bg-slate-50 border border-slate-100 p-3 rounded-lg text-left max-w-xl">
-                                  <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Ulasan Guru</span>
-                                  <p className="text-xs text-slate-650 leading-relaxed font-semibold italic">"{grd.feedback}"</p>
-                                </div>
-                              )}
                             </div>
+
+                            {/* Beautiful micro bubble callback feedback aligned parallelly */}
+                            {grd && grd.feedback && (
+                              <div className="flex-1 min-w-0 max-w-sm md:border-l md:border-slate-150 md:pl-5 text-left py-1">
+                                <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Ulasan Guru</span>
+                                <p className="text-xs text-slate-650 leading-relaxed font-semibold italic">"{grd.feedback}"</p>
+                              </div>
+                            )}
 
                             {/* Status badge and elegant grade scores */}
                             <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-4 border-t md:border-t-0 border-slate-100 pt-3.5 md:pt-0 md:pl-6 md:border-l md:border-slate-100 shrink-0 min-w-[140px]">
