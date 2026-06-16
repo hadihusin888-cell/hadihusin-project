@@ -559,116 +559,212 @@ export default function StudentPanel() {
 
         {/* TAB 4: NILAI SAYA */}
         {activeTab === 'nilai' && (
-          <div className="space-y-4">
-            {studentAssignments.length === 0 ? (
-              <div className="bg-white p-12 text-center rounded-2xl border text-slate-400 text-xs">Belum ada riwayat beban tugas terdaftar kelas Anda.</div>
-            ) : (
-              <div className="space-y-4">
-                {/* Filter Mapel */}
-                <div className="flex flex-col sm:flex-row gap-4 justify-between bg-white p-4 rounded-xl border border-slate-200/50">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-500">Saring berdasarkan Mapel:</span>
-                    <select
-                      className="text-xs font-bold p-2 border rounded-lg bg-slate-50 focus:outline-none"
-                      value={selectedGradeMapelFilter}
-                      onChange={(e) => setSelectedGradeMapelFilter(e.target.value)}
-                    >
-                      <option value="">-- Semua Mata Pelajaran --</option>
-                      {subjects.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <p className="text-xs text-slate-400 font-semibold self-end sm:self-center">
-                    Tugas ditemukan: <b>{filteredGradeAssignments.length}</b> latihan
-                  </p>
-                </div>
+          <div className="space-y-5">
+            {(() => {
+              const gradedAssignments = studentAssignments.filter(a => {
+                const grd = grades.find(g => g.studentId === currentUser?.id && g.assignmentId === a.id);
+                return grd && grd.status === 'GRADED' && grd.grade !== undefined;
+              });
 
-                {filteredGradeAssignments.length === 0 ? (
-                  <div className="bg-white p-12 text-center rounded-2xl border text-slate-400 text-xs">Belum ada tugas atau latihan atau nilai untuk mata pelajaran ini.</div>
-                ) : (
-                  <div className="space-y-3">
-                    {/* Header list header for desktop */}
-                    <div className="hidden md:flex items-center justify-between px-6 py-3 text-2xs font-extrabold text-slate-400 uppercase tracking-wider border-b border-slate-150">
-                      <div className="flex-1">Detail Tugas dan Mata Pelajaran</div>
-                      <div className="w-40 text-center">Status</div>
-                      <div className="w-36 text-right">Nilai / Ulasan</div>
+              const totalGraded = gradedAssignments.length;
+              const averageGrade = totalGraded > 0
+                ? Math.round(gradedAssignments.reduce((acc, a) => {
+                    const grd = grades.find(g => g.studentId === currentUser?.id && g.assignmentId === a.id);
+                    return acc + (grd?.grade || 0);
+                  }, 0) / totalGraded)
+                : 0;
+
+              const completedCount = studentAssignments.filter(a => {
+                const grd = grades.find(g => g.studentId === currentUser?.id && g.assignmentId === a.id);
+                return grd && (grd.status === 'SUBMITTED' || grd.status === 'GRADED');
+              }).length;
+
+              const pendingCount = studentAssignments.length - completedCount;
+
+              if (studentAssignments.length === 0) {
+                return (
+                  <div className="bg-white p-12 text-center rounded-2xl border border-slate-100 text-slate-400 text-xs">
+                    Belum ada riwayat beban tugas terdaftar kelas Anda.
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-5 font-sans">
+                  {/* Bento Stats Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {/* Card 1: Average */}
+                    <div className="bg-gradient-to-br from-teal-500/[0.03] to-emerald-500/[0.03] bg-white p-4.5 rounded-2xl border border-slate-100 hover:border-teal-200/50 shadow-3xs transition-all duration-200 flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Rerata Nilai</p>
+                        <div className="flex items-baseline gap-1">
+                          <span id="avg-grade-display" className="text-3xl font-black text-teal-700 tracking-tight font-mono">{averageGrade || '-'}</span>
+                          {averageGrade > 0 && <span className="text-2xs text-slate-400 font-bold font-mono">/100</span>}
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-semibold">Tugas dinilai: <b>{totalGraded}</b></p>
+                      </div>
+                      <div className="p-3 bg-teal-50/80 rounded-xl border border-teal-100/60 text-teal-600">
+                        <Award className="w-5 h-5" />
+                      </div>
                     </div>
 
-                    {filteredGradeAssignments.map(a => {
-                      const subObj = subjects.find(s => s.id === a.subjectId);
-                      const teacherObj = teachers.find(t => t.id === a.teacherId);
-                      const grd = grades.find(g => g.studentId === currentUser?.id && g.assignmentId === a.id);
-                      const hasGrade = grd && grd.grade !== undefined;
+                    {/* Card 2: Completed Progress */}
+                    <div className="bg-gradient-to-br from-teal-500/[0.03] to-indigo-500/[0.03] bg-white p-4.5 rounded-2xl border border-slate-100 hover:border-indigo-200/50 shadow-3xs transition-all duration-200 flex items-center justify-between">
+                      <div className="space-y-2 w-full mr-4">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sudah Selesai</p>
+                        <div className="flex items-baseline gap-1">
+                          <span id="completed-count-display" className="text-3xl font-black text-teal-800 tracking-tight font-mono">{completedCount}</span>
+                          <span className="text-2xs text-slate-400 font-bold font-mono">/ {studentAssignments.length} Tugas</span>
+                        </div>
+                        {/* Compact line bar */}
+                        <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+                          <div 
+                            className="bg-teal-600 h-1 rounded-full transition-all duration-500" 
+                            style={{ width: `${studentAssignments.length > 0 ? (completedCount / studentAssignments.length) * 100 : 0}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="p-3 bg-teal-50/80 rounded-xl border border-teal-100/60 text-teal-600 shrink-0">
+                        <CheckCircle2 className="w-5 h-5" />
+                      </div>
+                    </div>
 
-                      return (
-                        <div 
-                          key={a.id} 
-                          className="bg-white p-5 rounded-2xl border border-slate-200/60 shadow-xs hover:border-slate-300 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4 text-left"
-                        >
-                          {/* Left: Task & Subject Info */}
-                          <div className="flex-1 min-w-0 space-y-1.5">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-[10px] font-black text-teal-800 bg-teal-50 border border-teal-100 px-2 py-0.5 rounded-md uppercase tracking-wider">
-                                {subObj?.name || 'Mata Pelajaran'}
-                              </span>
-                              <span className="text-2xs text-slate-400 font-medium">
-                                Oleh: <b className="text-slate-600 font-semibold">{teacherObj?.name || 'Guru'}</b>
-                              </span>
-                            </div>
-                            
-                            <h4 className="font-extrabold text-slate-900 text-sm md:text-base tracking-tight leading-tight">
-                              {a.title}
-                            </h4>
+                    {/* Card 3: Remaining */}
+                    <div className="bg-gradient-to-br from-amber-500/[0.03] to-orange-500/[0.03] bg-white p-4.5 rounded-2xl border border-slate-100 hover:border-amber-200/50 shadow-3xs transition-all duration-200 flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Belum Selesai</p>
+                        <div className="flex items-baseline gap-1">
+                          <span id="pending-count-display" className="text-3xl font-black text-amber-600 tracking-tight font-mono">{pendingCount}</span>
+                          <span className="text-2xs text-slate-400 font-bold font-mono">Tugas</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-semibold">Butuh dikerjakan segera</p>
+                      </div>
+                      <div className="p-3 bg-amber-50/80 rounded-xl border border-amber-100/60 text-amber-600">
+                        <Clock className="w-5 h-5" />
+                      </div>
+                    </div>
+                  </div>
 
-                            {/* Inline Feedback / Ulasan Guru info */}
-                            {grd && grd.feedback && (
-                              <div className="mt-2 bg-slate-50 p-3 rounded-xl border border-slate-100 text-[11px] text-slate-600 leading-relaxed font-sans">
-                                <span className="font-bold text-slate-400 text-[9px] uppercase block tracking-wider mb-1">Feedback/Ulasan Guru:</span>
-                                "{grd.feedback}"
+                  {/* Sorteer / Filter Header */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-50 border border-slate-100 p-3 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xs font-extrabold text-slate-400 uppercase tracking-wider">Mata Pelajaran:</span>
+                      <select
+                        className="text-xs font-bold px-2 py-1.5 border border-slate-200/80 rounded-lg bg-white text-slate-700 focus:outline-none focus:border-teal-500"
+                        value={selectedGradeMapelFilter}
+                        onChange={(e) => setSelectedGradeMapelFilter(e.target.value)}
+                      >
+                        <option value="">Semua Pelajaran</option>
+                        {subjects.map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <span className="text-[11px] text-slate-550 font-bold">
+                      Ditemukan: <b className="text-teal-700">{filteredGradeAssignments.length}</b> beban tugas
+                    </span>
+                  </div>
+
+                  {filteredGradeAssignments.length === 0 ? (
+                    <div className="bg-white p-12 text-center rounded-2xl border border-slate-100 text-slate-400 text-xs">
+                      Belum ada tugas atau nilai untuk mata pelajaran pilihan ini.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {filteredGradeAssignments.map(a => {
+                        const subObj = subjects.find(s => s.id === a.subjectId);
+                        const teacherObj = teachers.find(t => t.id === a.teacherId);
+                        const grd = grades.find(g => g.studentId === currentUser?.id && g.assignmentId === a.id);
+                        const hasGrade = grd && grd.grade !== undefined;
+
+                        let statusColor = "border-l-slate-200";
+                        let rowBg = "bg-white";
+                        if (grd) {
+                          if (grd.status === 'SUBMITTED') {
+                            statusColor = "border-l-amber-400";
+                            rowBg = "bg-slate-50/20";
+                          } else if (grd.status === 'GRADED') {
+                            statusColor = "border-l-teal-500";
+                          } else if (grd.status === 'RESET') {
+                            statusColor = "border-l-rose-450";
+                            rowBg = "bg-rose-500/[0.01]";
+                          }
+                        }
+
+                        return (
+                          <div 
+                            key={a.id} 
+                            id={`grade-card-${a.id}`}
+                            className={`p-4 rounded-xl border border-slate-100 shadow-3xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all hover:border-slate-200 border-l-4 ${statusColor} ${rowBg}`}
+                          >
+                            <div className="flex-1 min-w-0 space-y-1.5 text-left">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-[8.5px] font-black tracking-widest text-teal-800 bg-teal-50 px-2 py-0.5 rounded-sm uppercase">
+                                  {subObj?.name || 'Mata Pelajaran'}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-semibold">
+                                  Oleh: <span className="text-slate-650">{teacherObj?.name || 'Guru'}</span>
+                                </span>
+                                {a.dueDate && (
+                                  <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
+                                    • Tenggat: {a.dueDate}
+                                  </span>
+                                )}
                               </div>
-                            )}
-                            {!grd?.feedback && grd?.status === 'GRADED' && (
-                              <p className="text-[10px] text-slate-400 italic">Guru tidak menyertakan ulasan tertulis.</p>
-                            )}
-                          </div>
+                              
+                              <h4 className="font-extrabold text-slate-800 text-sm tracking-tight leading-snug">
+                                {a.title}
+                              </h4>
 
-                          {/* Middle: Status Badge */}
-                          <div className="flex md:block items-center justify-between border-t md:border-t-0 border-slate-100 pt-3 md:pt-0 md:w-40 text-center">
-                            <span className="text-2xs text-slate-400 font-bold uppercase md:hidden">Status</span>
-                            <span className={`text-[10px] font-extrabold px-3 py-1.5 rounded-xl ${
-                              !grd || grd.status === 'NOT_SUBMITTED' ? 'bg-slate-100 text-slate-600 border border-slate-200/40' :
-                              grd.status === 'SUBMITTED' ? 'bg-amber-50 text-amber-700 border border-amber-200/60' :
-                              grd.status === 'GRADED' ? 'bg-green-50 text-green-700 border border-green-200/60 font-black' : 'bg-red-50 text-red-600 border border-red-200/60'
-                            }`}>
-                              {!grd || grd.status === 'NOT_SUBMITTED' ? 'Belum Dikumpul' :
-                               grd.status === 'SUBMITTED' ? 'Pending (Diperiksa)' :
-                               grd.status === 'GRADED' ? 'Sudah Dinilai' : 'Minta Ulang (Form Ulang)'}
-                            </span>
-                          </div>
-
-                          {/* Right: Score Display */}
-                          <div className="flex md:block items-center justify-between border-t md:border-t-0 border-slate-150 pt-3 md:pt-0 md:w-36 md:text-right">
-                            <span className="text-2xs text-slate-400 font-bold uppercase md:hidden font-sans">Nilai Angka</span>
-                            <div>
-                              {hasGrade ? (
-                                <div className="flex items-baseline md:justify-end gap-1">
-                                  <span className="text-2xl font-black text-teal-700 font-mono tracking-tight">{grd.grade}</span>
-                                  <span className="text-2xs text-slate-400 font-bold font-mono">/100</span>
+                              {/* Beautiful micro bubble callback feedback */}
+                              {grd && grd.feedback && (
+                                <div className="mt-2 bg-slate-50/80 border border-slate-100 p-2.5 rounded-lg text-left max-w-xl">
+                                  <span className="block text-[8px] font-black text-slate-450 uppercase tracking-widest mb-0.5">Ulasan Guru</span>
+                                  <p className="text-[10px] text-slate-600 leading-normal italic font-medium">"{grd.feedback}"</p>
                                 </div>
-                              ) : (
-                                <span className="text-xs text-slate-400 font-semibold italic">Menunggu Dinilai</span>
                               )}
                             </div>
-                          </div>
 
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+                            {/* Status badge and elegant grade scores */}
+                            <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-t-0 border-slate-100 pt-3 md:pt-0 shrink-0">
+                              <div className="text-left md:text-right">
+                                <span className="block md:hidden text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Status</span>
+                                <span className={`inline-flex items-center gap-1.5 text-[9.5px] font-black px-2.5 py-1 rounded-full border ${
+                                  !grd || grd.status === 'NOT_SUBMITTED' ? 'bg-slate-50 text-slate-500 border-slate-200/50' :
+                                  grd.status === 'SUBMITTED' ? 'bg-amber-50 text-amber-700 border-amber-200/40' :
+                                  grd.status === 'GRADED' ? 'bg-teal-50 text-teal-700 border-teal-200/40' : 'bg-rose-50 text-rose-600 border-rose-200/40'
+                                }`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${
+                                    !grd || grd.status === 'NOT_SUBMITTED' ? 'bg-slate-300' :
+                                    grd.status === 'SUBMITTED' ? 'bg-amber-500 animate-pulse' :
+                                    grd.status === 'GRADED' ? 'bg-teal-500' : 'bg-red-500'
+                                  }`} />
+                                  {!grd || grd.status === 'NOT_SUBMITTED' ? 'Belum Dikumpul' :
+                                   grd.status === 'SUBMITTED' ? 'Sedang Diperiksa' :
+                                   grd.status === 'GRADED' ? 'Sudah Dinilai' : 'Minta Ulang'}
+                                </span>
+                              </div>
+
+                              <div className="text-right flex flex-col items-end justify-center min-w-[65px]">
+                                <span className="block md:hidden text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nilai</span>
+                                {hasGrade ? (
+                                  <div className="flex items-baseline justify-end">
+                                    <span className="text-2xl font-black text-teal-600 font-mono tracking-tight">{grd.grade}</span>
+                                    <span className="text-[10px] text-slate-400 font-bold font-mono">/100</span>
+                                  </div>
+                                ) : (
+                                  <span className="text-[11px] text-slate-400 font-semibold italic">--</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
