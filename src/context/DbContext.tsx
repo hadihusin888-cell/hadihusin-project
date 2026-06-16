@@ -220,7 +220,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       return;
     }
 
-    // Do not call setIsLoading(true) here to prevent annoying full-screen flashes/blank views during logins/re-registrations of onSnapshot listeners
+    // Prevent annoying full-screen blocker during live listener registration so local cache loads instantly
     const unsubscribes: (() => void)[] = [];
 
     let activeLoadedCollections = 0;
@@ -591,7 +591,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       }
       
       if (teacher && teacher.password === password) {
-        const classIds = teacher.subjectsTaught?.map((s: any) => s.classId) || [];
+        const classIds = Array.from(new Set(teacher.subjectsTaught?.flatMap((s: any) => s.classIds || []) || []));
         const user: SessionUser = { 
           id: teacher.id, 
           name: teacher.name, 
@@ -599,6 +599,16 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           loginAt: Date.now(),
           meta: { nik: teacher.nik, classIds } 
         };
+        // Inject teacher record into state list immediately if missing to avoid blank user panels on mount
+        const currentTeacherCopy = teacher;
+        setTeachers(prev => {
+          if (!prev.some(t => t.id === currentTeacherCopy.id)) {
+            const updated = [...prev, currentTeacherCopy];
+            localStorage.setItem('smp_teachers', JSON.stringify(updated));
+            return updated;
+          }
+          return prev;
+        });
         setCurrentUser(user);
         localStorage.setItem('smp_current_user', JSON.stringify(user));
         return user;
@@ -627,6 +637,16 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           loginAt: Date.now(),
           meta: { nis: student.nis, classId: student.classId } 
         };
+        // Inject student record into state list immediately if missing to avoid blank user panels on mount
+        const currentStudentCopy = student;
+        setStudents(prev => {
+          if (!prev.some(s => s.id === currentStudentCopy.id)) {
+            const updated = [...prev, currentStudentCopy];
+            localStorage.setItem('smp_students', JSON.stringify(updated));
+            return updated;
+          }
+          return prev;
+        });
         setCurrentUser(user);
         localStorage.setItem('smp_current_user', JSON.stringify(user));
         return user;

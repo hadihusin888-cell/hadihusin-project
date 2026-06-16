@@ -173,6 +173,12 @@ export default function StudentPanel() {
       return `https://docs.google.com/forms/d/e/${formsMatch[1]}/viewform?embedded=true`;
     }
 
+    // Canva
+    const canvaMatch = url.match(/canva\.com\/design\/([a-zA-Z0-9_-]+)/);
+    if (canvaMatch) {
+      return `https://www.canva.com/design/${canvaMatch[1]}/view?embed`;
+    }
+
     return null;
   };
 
