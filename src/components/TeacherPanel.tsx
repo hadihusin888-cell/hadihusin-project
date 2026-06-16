@@ -802,7 +802,9 @@ export default function TeacherPanel() {
                             </td>
                             <td className="p-4 font-medium text-slate-800 text-left truncate max-w-xs">{asg?.title || 'Tugas Terhapus'}</td>
                             <td className="p-4 text-left">
-                              {g.submissionLink ? (
+                              {(!asg || !asg.formEnabled || g.submissionLink === 'Form submission not required' || !g.submissionLink) ? (
+                                <span className="text-slate-450 font-mono font-bold text-xs">-</span>
+                              ) : (
                                 <a
                                   href={g.submissionLink}
                                   target="_blank"
@@ -811,8 +813,6 @@ export default function TeacherPanel() {
                                 >
                                   Buka Berkas <ExternalLink className="w-3 h-3" />
                                 </a>
-                              ) : (
-                                <span className="text-slate-400">Tidak membutuhkan link berkas</span>
                               )}
                             </td>
                             <td className="p-4 text-center">
@@ -1259,14 +1259,25 @@ export default function TeacherPanel() {
                       <p className="text-2xs font-bold text-slate-400 uppercase tracking-widest mb-1">DATA SUBMISI siswa</p>
                       <p className="text-xs text-slate-800">Nama Siswa: <b>{students.find(s => s.id === selectedGradeItem.studentId)?.name || selectedGradeItem.studentId}</b></p>
                       <p className="text-xs text-slate-800">Tugas: <b>{assignments.find(a => a.id === selectedGradeItem.assignmentId)?.title}</b></p>
-                      {selectedGradeItem.submissionLink && (
-                        <p className="text-xs text-slate-800">
-                          Tautan Laporan: 
-                          <a href={selectedGradeItem.submissionLink} target="_blank" rel="noreferrer" className="text-teal-600 hover:underline inline-flex items-center gap-1 ml-1 font-mono">
-                            {selectedGradeItem.submissionLink} <ExternalLink className="w-3 h-3" />
-                          </a>
-                        </p>
-                      )}
+                      {(() => {
+                        const asg = assignments.find(a => a.id === selectedGradeItem.assignmentId);
+                        const isNotRequired = !asg || !asg.formEnabled || selectedGradeItem.submissionLink === 'Form submission not required' || !selectedGradeItem.submissionLink;
+                        if (isNotRequired) {
+                          return (
+                            <p className="text-xs text-slate-800">
+                              Tautan Laporan: <span className="text-slate-450 font-mono font-bold ml-1">-</span>
+                            </p>
+                          );
+                        }
+                        return (
+                          <p className="text-xs text-slate-800">
+                            Tautan Laporan: 
+                            <a href={selectedGradeItem.submissionLink} target="_blank" rel="noreferrer" className="text-teal-600 hover:underline inline-flex items-center gap-1 ml-1 font-mono">
+                              {selectedGradeItem.submissionLink} <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </p>
+                        );
+                      })()}
                     </div>
 
                     <div className="grid grid-cols-1 gap-4">

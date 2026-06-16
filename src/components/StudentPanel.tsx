@@ -559,7 +559,7 @@ export default function StudentPanel() {
 
         {/* TAB 4: NILAI SAYA */}
         {activeTab === 'nilai' && (
-          <div className="space-y-5">
+          <div className="space-y-5 max-w-4xl">
             {(() => {
               const gradedAssignments = studentAssignments.filter(a => {
                 const grd = grades.find(g => g.studentId === currentUser?.id && g.assignmentId === a.id);
