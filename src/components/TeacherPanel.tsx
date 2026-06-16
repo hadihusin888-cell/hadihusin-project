@@ -18,7 +18,8 @@ import {
   ToggleLeft,
   X,
   FileCheck,
-  Calendar
+  Calendar,
+  Printer
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -73,6 +74,7 @@ export default function TeacherPanel() {
 
   // Filter valuation
   const [selectedAsgFilter, setSelectedAsgFilter] = useState<string>('');
+  const [showPrintModal, setShowPrintModal] = useState(false);
 
   // Filter by Jenjang Kelas (Grade level)
   const [mGradeFilter, setMGradeFilter] = useState<'ALL' | '7' | '8' | '9'>('ALL');
@@ -768,8 +770,16 @@ export default function TeacherPanel() {
                   ))}
                 </select>
               </div>
-              <p className="text-xs text-slate-400 font-semibold flex items-center gap-1.5 self-end sm:self-center">
+              <p className="text-xs text-slate-400 font-semibold flex items-center gap-3 self-end sm:self-center">
                 <span>Ditemukan: <b>{currentGrades.length}</b> masukan</span>
+                {selectedAsgFilter && (
+                  <button
+                    onClick={() => setShowPrintModal(true)}
+                    className="inline-flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition shadow-3xs cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" /> Cetak Daftar Nilai
+                  </button>
+                )}
               </p>
             </div>
 
@@ -1318,6 +1328,206 @@ export default function TeacherPanel() {
                 )}
 
               </div>
+            </motion.div>
+          </div>
+        )}
+
+        {showPrintModal && selectedAsgFilter && (
+          <div id="print-modal-backdrop" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs p-4 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 15 }}
+              className="bg-white w-full max-w-4xl rounded-2xl shadow-xl overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]"
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50 shrink-0">
+                <div className="flex items-center gap-2">
+                  <Printer className="w-5 h-5 text-teal-650" />
+                  <h3 className="font-extrabold text-slate-900 text-sm tracking-tight">Pratinjau Cetak Daftar Nilai</h3>
+                </div>
+                <button
+                  onClick={() => setShowPrintModal(false)}
+                  className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-400 hover:text-slate-700 transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Scrollable Preview Area */}
+              <div className="p-8 overflow-y-auto flex-1 bg-slate-50/50">
+                {/* Print area wrapper */}
+                <div 
+                  id="print-area" 
+                  className="bg-white shadow-xs p-8 rounded-xl border border-slate-200/60 max-w-3xl mx-auto space-y-6 font-sans text-slate-800"
+                >
+                  {/* Style Override for Printer Target */}
+                  <style dangerouslySetInnerHTML={{
+                    __html: `
+                      @media print {
+                        body {
+                          background: white !important;
+                          color: black !important;
+                        }
+                        #print-backdrop {
+                          background: transparent !important;
+                          position: static !important;
+                          padding: 0 !important;
+                          overflow: visible !important;
+                        }
+                        /* Hide everything outside of print-area */
+                        body > * {
+                          display: none !important;
+                        }
+                        #print-area-wrapper-body {
+                          display: block !important;
+                        }
+                        /* Show only our print area */
+                        #print-area, #print-area * {
+                          visibility: visible !important;
+                          display: block !important;
+                        }
+                        #print-area {
+                          position: absolute;
+                          left: 0;
+                          top: 0;
+                          width: 100%;
+                          border: none !important;
+                          box-shadow: none !important;
+                          padding: 0 !important;
+                          margin: 0 !important;
+                        }
+                        .no-print {
+                          display: none !important;
+                        }
+                        table {
+                          width: 100% !important;
+                          border-collapse: collapse !important;
+                        }
+                        th, td {
+                          border: 1px solid #cbd5e1 !important;
+                          padding: 8px !important;
+                        }
+                      }
+                    `
+                  }} />
+
+                  {/* KOP LAPORAN */}
+                  <div className="text-center space-y-2 border-b-2 border-slate-900 pb-5">
+                    <h2 className="text-lg font-black tracking-widest text-slate-900 uppercase">DAFTAR NILAI DAN KETUNTASAN BELAJAR SISWA</h2>
+                    <p className="text-2xs text-slate-400 tracking-wider font-bold">MUTIARA ISLAMIC SCHOOL & LEARNING PORTAL</p>
+                  </div>
+
+                  {/* METADATA INFORMASI */}
+                  {(() => {
+                    const asgObj = assignments.find(a => a.id === selectedAsgFilter);
+                    const classObj = classes.find(c => c.id === asgObj?.classId);
+                    const subObj = subjects.find(s => s.id === asgObj?.subjectId);
+                    const teacherObj = teachers.find(t => t.id === asgObj?.teacherId);
+
+                    const classStudents = students.filter(s => s.classId === asgObj?.classId);
+                    const sortedClassStudents = [...classStudents].sort((a, b) => (a.nis || '').localeCompare(b.nis || ''));
+
+                    return (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4 text-xs">
+                          <div className="space-y-1.5 text-left">
+                            <p>Mata Pelajaran : <b className="text-slate-900">{subObj?.name || '-'}</b></p>
+                            <p>Nama Latihan/Tugas : <b className="text-slate-900">{asgObj?.title || '-'}</b></p>
+                          </div>
+                          <div className="space-y-1.5 text-left md:pl-8">
+                            <p>Kelas / Jenjang : <b className="text-slate-900">{classObj?.name || asgObj?.classId || '-'}</b></p>
+                            <p>Guru Pengampu : <b className="text-slate-900">{teacherObj?.name || '-'}</b></p>
+                          </div>
+                        </div>
+
+                        {/* TABEL DAFTAR SISWA */}
+                        <div className="overflow-hidden border border-slate-350 rounded-lg">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="bg-slate-100 border-b border-slate-350 text-slate-650 font-extrabold uppercase text-[10px]">
+                                <th className="p-3 border-r border-slate-300 w-12 text-center">No</th>
+                                <th className="p-3 border-r border-slate-300 w-32 text-center">NIS</th>
+                                <th className="p-3 border-r border-slate-300">Nama Lengkap Murid</th>
+                                <th className="p-3 border-r border-slate-300 w-36 text-center">Status</th>
+                                <th className="p-3 border-r border-slate-300 w-24 text-center">Nilai Angka</th>
+                                <th className="p-3">Catatan Kompetensi / Ulasan</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-300 text-slate-700">
+                              {sortedClassStudents.length === 0 ? (
+                                <tr>
+                                  <td colSpan={6} className="p-4 text-center text-slate-400 italic">Tidak ada siswa terdaftar untuk kelas ini.</td>
+                                </tr>
+                              ) : (
+                                sortedClassStudents.map((std, idx) => {
+                                  const grd = grades.find(g => g.studentId === std.id && g.assignmentId === selectedAsgFilter);
+                                  const hasGrade = grd && grd.grade !== undefined;
+                                  
+                                  let statusText = "Belum Mengumpul";
+                                  if (grd) {
+                                    if (grd.status === 'SUBMITTED') statusText = "Diperiksa";
+                                    else if (grd.status === 'GRADED') statusText = "Telah Dinilai";
+                                    else if (grd.status === 'RESET') statusText = "Minta Ulang";
+                                  }
+
+                                  return (
+                                    <tr key={std.id} className="hover:bg-slate-50/50">
+                                      <td className="p-2.5 border-r border-slate-300 text-center font-mono">{idx + 1}</td>
+                                      <td className="p-2.5 border-r border-slate-300 font-mono font-bold text-center">{std.nis || '-'}</td>
+                                      <td className="p-2.5 border-r border-slate-300 font-bold text-slate-900">{std.name}</td>
+                                      <td className="p-2.5 border-r border-slate-300 text-center font-semibold text-[10px]">
+                                        {statusText}
+                                      </td>
+                                      <td className="p-2.5 border-r border-slate-300 text-center font-mono font-black text-sm text-teal-700">
+                                        {hasGrade ? grd.grade : '-'}
+                                      </td>
+                                      <td className="p-2.5 text-left text-[10.5px] italic text-slate-550">
+                                        {grd?.feedback || (hasGrade ? '-' : 'Belum mengumpulkan tugas')}
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* AREA TANDA TANGAN */}
+                        <div className="pt-8 flex justify-end">
+                          <div className="text-center space-y-16 text-xs w-52">
+                            <div>
+                              <p>Mengetahui,</p>
+                              <p className="font-semibold">Guru Pengampu</p>
+                            </div>
+                            <div className="space-y-0.5">
+                              <p className="font-bold underline">{teacherObj?.name || '_____________________'}</p>
+                              <p className="text-[10px] text-slate-450">NIP/NIK: {teacherObj?.id || '-'}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Action Footer */}
+              <div className="bg-slate-50 px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3 shrink-0">
+                <button
+                  onClick={() => setShowPrintModal(false)}
+                  className="px-4 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs cursor-pointer hover:bg-slate-50 transition"
+                >
+                  Tutup
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-xs cursor-pointer transition shadow-xs hover:shadow-2xs flex items-center gap-1.5"
+                >
+                  <Printer className="w-4 h-4" /> Cetak via Browser
+                </button>
+              </div>
+
             </motion.div>
           </div>
         )}
