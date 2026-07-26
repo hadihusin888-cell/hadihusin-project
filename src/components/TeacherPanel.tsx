@@ -49,6 +49,7 @@ export default function TeacherPanel() {
   const [modalType, setModalType] = useState<'create' | 'edit' | 'grade' | null>(null);
   const [targetEntity, setTargetEntity] = useState<'materi' | 'tugas' | 'nilai' | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingAllIds, setEditingAllIds] = useState<string[]>([]);
 
   // Material Form
   const [mTitle, setMTitle] = useState('');
@@ -111,6 +112,9 @@ export default function TeacherPanel() {
       triggerToast(`Materi berhasil diunggah ke kelas ${combinedClassId}!`);
     } else if (modalType === 'edit' && editingId) {
       editMaterial(editingId, mTitle, mDesc, mLink, combinedClassId, mSubjectId);
+      if (editingAllIds && editingAllIds.length > 1) {
+        editingAllIds.slice(1).forEach(idToDelete => deleteMaterial(idToDelete));
+      }
       triggerToast('Materi berhasil diperbarui!');
     }
     closeModal();
@@ -128,6 +132,9 @@ export default function TeacherPanel() {
       triggerToast(`Tugas latihan berhasil diposting ke kelas ${combinedClassId}!`);
     } else if (modalType === 'edit' && editingId) {
       editAssignment(editingId, tTitle, tDesc, tDueDate, tLink, combinedClassId, tSubjectId, tFormEnabled, tPreviewEnabled);
+      if (editingAllIds && editingAllIds.length > 1) {
+        editingAllIds.slice(1).forEach(idToDelete => deleteAssignment(idToDelete));
+      }
       triggerToast('Tugas latihan berhasil diperbarui!');
     }
     closeModal();
@@ -146,6 +153,7 @@ export default function TeacherPanel() {
     setModalType(null);
     setTargetEntity(null);
     setEditingId(null);
+    setEditingAllIds([]);
     setSelectedGradeItem(null);
     
     // reset form
@@ -172,6 +180,7 @@ export default function TeacherPanel() {
     setModalType('edit');
     setTargetEntity(entity);
     setEditingId(item.id);
+    setEditingAllIds(item.allIds || [item.id]);
 
     if (entity === 'materi') {
       setMTitle(item.title);
@@ -196,6 +205,7 @@ export default function TeacherPanel() {
   const openAddModal = (entity: 'materi' | 'tugas') => {
     setModalType('create');
     setTargetEntity(entity);
+    setEditingAllIds([]);
     
     // Auto populate subject / class if only one exists
     if (activeSubjectIds.length === 1) {
@@ -237,9 +247,77 @@ export default function TeacherPanel() {
     setNewPass('');
   };
 
-  // Filter entities created by this teacher
-  const teacherMaterials = materials.filter(m => m.teacherId === currentUser?.id);
-  const teacherAssignments = assignments.filter(a => a.teacherId === currentUser?.id);
+  // Helper to consolidate duplicate material/assignment records targeted to multiple classes
+  const getConsolidatedMaterials = (matList: Material[]) => {
+    const map = new Map<string, Material & { allIds: string[]; classIdsArray: string[] }>();
+    matList.forEach(m => {
+      const key = `${(m.title || '').trim().toLowerCase()}|${m.subjectId}|${m.teacherId}|${(m.link || '').trim().toLowerCase()}`;
+      const existing = map.get(key);
+      const classes = m.classId ? m.classId.split(',').map(c => c.trim()).filter(Boolean) : [];
+
+      if (!existing) {
+        map.set(key, {
+          ...m,
+          allIds: [m.id],
+          classIdsArray: Array.from(new Set(classes))
+        });
+      } else {
+        const mergedClasses = Array.from(new Set([...existing.classIdsArray, ...classes]));
+        if (!existing.allIds.includes(m.id)) {
+          existing.allIds.push(m.id);
+        }
+        existing.classIdsArray = mergedClasses;
+        existing.classId = mergedClasses.join(', ');
+        if (new Date(m.createdAt) > new Date(existing.createdAt)) {
+          existing.createdAt = m.createdAt;
+        }
+      }
+    });
+
+    return Array.from(map.values()).map(item => ({
+      ...item,
+      classId: item.classIdsArray.join(', ')
+    }));
+  };
+
+  const getConsolidatedAssignments = (asgList: Assignment[]) => {
+    const map = new Map<string, Assignment & { allIds: string[]; classIdsArray: string[] }>();
+    asgList.forEach(a => {
+      const key = `${(a.title || '').trim().toLowerCase()}|${a.subjectId}|${a.teacherId}|${(a.dueDate || '').trim().toLowerCase()}`;
+      const existing = map.get(key);
+      const classes = a.classId ? a.classId.split(',').map(c => c.trim()).filter(Boolean) : [];
+
+      if (!existing) {
+        map.set(key, {
+          ...a,
+          allIds: [a.id],
+          classIdsArray: Array.from(new Set(classes))
+        });
+      } else {
+        const mergedClasses = Array.from(new Set([...existing.classIdsArray, ...classes]));
+        if (!existing.allIds.includes(a.id)) {
+          existing.allIds.push(a.id);
+        }
+        existing.classIdsArray = mergedClasses;
+        existing.classId = mergedClasses.join(', ');
+        if (new Date(a.createdAt) > new Date(existing.createdAt)) {
+          existing.createdAt = a.createdAt;
+        }
+      }
+    });
+
+    return Array.from(map.values()).map(item => ({
+      ...item,
+      classId: item.classIdsArray.join(', ')
+    }));
+  };
+
+  // Filter entities created by this teacher & consolidate
+  const rawTeacherMaterials = materials.filter(m => m.teacherId === currentUser?.id);
+  const rawTeacherAssignments = assignments.filter(a => a.teacherId === currentUser?.id);
+
+  const teacherMaterials = getConsolidatedMaterials(rawTeacherMaterials);
+  const teacherAssignments = getConsolidatedAssignments(rawTeacherAssignments);
 
   // Filtered by Grade level (Jenjang Kelas) helper
   const filteredMaterials = teacherMaterials.filter(m => {
@@ -256,7 +334,7 @@ export default function TeacherPanel() {
 
   // Gather grades filtered by assignments made by this teacher
   const currentGrades = grades.filter(g => {
-    const isTeacherAsg = teacherAssignments.some(a => a.id === g.assignmentId);
+    const isTeacherAsg = teacherAssignments.some(a => ((a as any).allIds || [a.id]).includes(g.assignmentId));
     if (!isTeacherAsg) return false;
     if (g.status === 'RESET' || g.status === 'NOT_SUBMITTED') return false;
     if (selectedAsgFilter && g.assignmentId !== selectedAsgFilter) return false;
@@ -265,7 +343,7 @@ export default function TeacherPanel() {
 
   // Calculate statistics
   const ungradedCount = grades.filter(g => 
-    teacherAssignments.some(a => a.id === g.assignmentId) && g.status === 'SUBMITTED'
+    teacherAssignments.some(a => ((a as any).allIds || [a.id]).includes(g.assignmentId)) && g.status === 'SUBMITTED'
   ).length;
 
   return (
@@ -558,10 +636,18 @@ export default function TeacherPanel() {
                     <div key={m.id} className="bg-white p-5 rounded-2xl border border-slate-200 transition-all duration-350 hover:shadow-lg hover:shadow-slate-200/40 hover:border-slate-300 space-y-4 flex flex-col justify-between">
                       <div className="space-y-3">
                         <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-                          <span className="bg-teal-50/70 text-teal-800 text-[10px] font-black px-2.5 py-1 rounded-lg border border-teal-100 tracking-wider uppercase">
-                            Kelas {m.classId}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-mono font-bold tracking-tight inline-flex items-center gap-1">
+                          <div className="flex flex-wrap gap-1 max-w-[220px]">
+                            {m.classId ? m.classId.split(',').map(c => c.trim()).filter(Boolean).map(clsName => (
+                              <span key={clsName} className="bg-teal-50/70 text-teal-800 text-[10px] font-black px-2 py-0.5 rounded-md border border-teal-100 tracking-wider uppercase">
+                                Kelas {clsName}
+                              </span>
+                            )) : (
+                              <span className="bg-teal-50/70 text-teal-800 text-[10px] font-black px-2 py-0.5 rounded-md border border-teal-100 tracking-wider uppercase">
+                                Semua Kelas
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-mono font-bold tracking-tight inline-flex items-center gap-1 shrink-0">
                             <Calendar className="w-3.5 h-3.5 text-slate-300" /> {new Date(m.createdAt).toLocaleDateString('id-ID')}
                           </span>
                         </div>
@@ -598,7 +684,8 @@ export default function TeacherPanel() {
                               title: 'Hapus Materi Pembelajaran',
                               message: 'Apakah Anda yakin ingin menghapus materi pembelajaran ini secara permanen dari sistem?',
                               onConfirm: () => {
-                                deleteMaterial(m.id);
+                                const idsToDelete = (m as any).allIds || [m.id];
+                                idsToDelete.forEach((idToDelete: string) => deleteMaterial(idToDelete));
                                 triggerToast('Materi berhasil dihapus!');
                               }
                             })}
@@ -670,10 +757,18 @@ export default function TeacherPanel() {
                     <div key={a.id} className="bg-white p-5 rounded-2xl border border-slate-200 transition-all duration-350 hover:shadow-lg hover:shadow-slate-200/40 hover:border-slate-300 space-y-4 flex flex-col justify-between">
                       <div className="space-y-3">
                         <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-                          <span className="bg-slate-100/90 text-slate-700 text-[10px] font-black px-2.5 py-1 rounded-lg border border-slate-205 tracking-wider uppercase">
-                            Kelas {a.classId}
-                          </span>
-                          <span className="text-[10px] px-2.5 py-1 bg-indigo-50 border border-indigo-150 text-indigo-700 rounded-lg font-bold uppercase font-mono tracking-tight">
+                          <div className="flex flex-wrap gap-1 max-w-[220px]">
+                            {a.classId ? a.classId.split(',').map(c => c.trim()).filter(Boolean).map(clsName => (
+                              <span key={clsName} className="bg-slate-100/90 text-slate-700 text-[10px] font-black px-2 py-0.5 rounded-md border border-slate-205 tracking-wider uppercase">
+                                Kelas {clsName}
+                              </span>
+                            )) : (
+                              <span className="bg-slate-100/90 text-slate-700 text-[10px] font-black px-2 py-0.5 rounded-md border border-slate-205 tracking-wider uppercase">
+                                Semua Kelas
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] px-2.5 py-1 bg-indigo-50 border border-indigo-150 text-indigo-700 rounded-lg font-bold uppercase font-mono tracking-tight shrink-0">
                             OFF-{a.id.substring(4, 8) || a.id}
                           </span>
                         </div>
@@ -738,7 +833,8 @@ export default function TeacherPanel() {
                               title: 'Hapus Tugas Latihan',
                               message: 'Apakah Anda yakin ingin menghapus tugas latihan ini? Riwayat pengisian nilai dan riwayat pengumpulan siswa terkait tugas ini akan ikut terhapus secara permanen.',
                               onConfirm: () => {
-                                deleteAssignment(a.id);
+                                const idsToDelete = (a as any).allIds || [a.id];
+                                idsToDelete.forEach((idToDelete: string) => deleteAssignment(idToDelete));
                                 triggerToast('Tugas latihan berhasil dihapus!');
                               }
                             })}
