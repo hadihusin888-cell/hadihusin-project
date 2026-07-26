@@ -111,7 +111,14 @@ export default function TeacherPanel() {
       triggerToast(`Materi berhasil diunggah ke ${mClassIds.length} kelas!`);
     } else if (modalType === 'edit' && editingId) {
       editMaterial(editingId, mTitle, mDesc, mLink, mClassIds[0], mSubjectId);
-      triggerToast('Materi berhasil diperbarui!');
+      if (mClassIds.length > 1) {
+        mClassIds.slice(1).forEach(classId => {
+          addMaterial(mTitle, mDesc, mLink, classId, mSubjectId, currentUser!.id);
+        });
+        triggerToast(`Materi berhasil diperbarui & ditambahkan ke ${mClassIds.length} kelas!`);
+      } else {
+        triggerToast('Materi berhasil diperbarui!');
+      }
     }
     closeModal();
   };
@@ -128,7 +135,14 @@ export default function TeacherPanel() {
       triggerToast(`Tugas latihan berhasil diposting ke ${tClassIds.length} kelas!`);
     } else if (modalType === 'edit' && editingId) {
       editAssignment(editingId, tTitle, tDesc, tDueDate, tLink, tClassIds[0], tSubjectId, tFormEnabled, tPreviewEnabled);
-      triggerToast('Tugas latihan berhasil diperbarui!');
+      if (tClassIds.length > 1) {
+        tClassIds.slice(1).forEach(classId => {
+          addAssignment(tTitle, tDesc, tDueDate, tLink, classId, tSubjectId, currentUser!.id, tFormEnabled, tPreviewEnabled);
+        });
+        triggerToast(`Tugas latihan berhasil diperbarui & ditambahkan ke ${tClassIds.length} kelas!`);
+      } else {
+        triggerToast('Tugas latihan berhasil diperbarui!');
+      }
     }
     closeModal();
   };
@@ -1056,45 +1070,65 @@ export default function TeacherPanel() {
                       </div>
 
                       <div>
-                        <label className="block text-[9px] font-black text-slate-600 uppercase tracking-wider mb-2 text-left">
-                          Tujuan Kelas {modalType === 'create' ? '(Bisa Pilih Lebih Dari 1)' : '(Pilih Kelas)'}
-                        </label>
+                        <div className="flex justify-between items-center mb-2">
+                          <label className="block text-[9px] font-black text-slate-600 uppercase tracking-wider text-left">
+                            Tujuan Kelas <span className="text-teal-650 font-extrabold">(Bisa Pilih Lebih Dari 1 Kelas)</span>
+                          </label>
+                          {activeClassIds.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (mClassIds.length === activeClassIds.length) {
+                                  setMClassIds([]);
+                                } else {
+                                  setMClassIds([...activeClassIds]);
+                                }
+                              }}
+                              className="text-teal-650 hover:text-teal-750 text-[10px] font-extrabold hover:underline cursor-pointer"
+                            >
+                              {mClassIds.length === activeClassIds.length ? 'Batal Pilih Semua' : 'Pilih Semua Kelas'}
+                            </button>
+                          )}
+                        </div>
                         {activeClassIds.length === 0 ? (
                           <p className="text-2xs text-slate-400 italic text-left">Belum ada kelas yang ditugaskan untuk Anda.</p>
                         ) : (
-                          <div className="flex flex-wrap gap-1.5 p-3 rounded-xl border border-slate-100 bg-slate-50/50">
-                            {activeClassIds.map(clsId => {
-                              const isSelected = mClassIds.includes(clsId);
-                              const classObj = classes.find(c => c.id === clsId);
-                              return (
-                                <button
-                                  type="button"
-                                  key={clsId}
-                                  onClick={() => {
-                                    if (isSelected) {
-                                      setMClassIds(mClassIds.filter(id => id !== clsId));
-                                    } else {
-                                      if (modalType === 'edit') {
-                                        setMClassIds([clsId]);
+                          <div className="space-y-1.5">
+                            <div className="flex flex-wrap gap-1.5 p-3 rounded-xl border border-slate-200/80 bg-slate-50/50">
+                              {activeClassIds.map(clsId => {
+                                const isSelected = mClassIds.includes(clsId);
+                                const classObj = classes.find(c => c.id === clsId);
+                                return (
+                                  <button
+                                    type="button"
+                                    key={clsId}
+                                    onClick={() => {
+                                      if (isSelected) {
+                                        setMClassIds(mClassIds.filter(id => id !== clsId));
                                       } else {
                                         setMClassIds([...mClassIds, clsId]);
                                       }
-                                    }
-                                  }}
-                                  className={`px-3 py-2 rounded-lg text-xs font-bold border transition duration-150 cursor-pointer select-none ${
-                                    isSelected 
-                                      ? 'bg-teal-600 border-teal-600 text-white shadow-xs' 
-                                      : 'bg-white border-slate-250 text-slate-700 hover:bg-slate-50'
-                                  }`}
-                                >
-                                  Kelas {classObj?.name || clsId}
-                                </button>
-                              );
-                            })}
+                                    }}
+                                    className={`px-3 py-2 rounded-lg text-xs font-bold border transition duration-150 cursor-pointer select-none flex items-center gap-1.5 ${
+                                      isSelected 
+                                        ? 'bg-teal-600 border-teal-600 text-white shadow-xs' 
+                                        : 'bg-white border-slate-250 text-slate-700 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    {isSelected && <span className="text-[10px]">✓</span>}
+                                    <span>Kelas {classObj?.name || clsId}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <div className="flex justify-between items-center text-[10px] px-1">
+                              {mClassIds.length === 0 ? (
+                                <p className="text-red-500 font-semibold">* Wajib memilih minimal 1 kelas tujuan.</p>
+                              ) : (
+                                <p className="text-teal-700 font-bold">Terpilih: {mClassIds.length} kelas tujuan</p>
+                              )}
+                            </div>
                           </div>
-                        )}
-                        {mClassIds.length === 0 && (
-                          <p className="text-[10px] text-red-500 font-semibold mt-1 text-left">* Wajib memilih minimal 1 kelas tujuan.</p>
                         )}
                       </div>
                     </div>
@@ -1194,45 +1228,65 @@ export default function TeacherPanel() {
                       </div>
 
                       <div>
-                        <label className="block text-[9px] font-black text-slate-600 uppercase tracking-wider mb-2 text-left">
-                          Tujuan Kelas {modalType === 'create' ? '(Bisa Pilih Lebih Dari 1)' : '(Pilih Kelas)'}
-                        </label>
+                        <div className="flex justify-between items-center mb-2">
+                          <label className="block text-[9px] font-black text-slate-600 uppercase tracking-wider text-left">
+                            Tujuan Kelas <span className="text-teal-650 font-extrabold">(Bisa Pilih Lebih Dari 1 Kelas)</span>
+                          </label>
+                          {activeClassIds.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (tClassIds.length === activeClassIds.length) {
+                                  setTClassIds([]);
+                                } else {
+                                  setTClassIds([...activeClassIds]);
+                                }
+                              }}
+                              className="text-teal-650 hover:text-teal-750 text-[10px] font-extrabold hover:underline cursor-pointer"
+                            >
+                              {tClassIds.length === activeClassIds.length ? 'Batal Pilih Semua' : 'Pilih Semua Kelas'}
+                            </button>
+                          )}
+                        </div>
                         {activeClassIds.length === 0 ? (
                           <p className="text-2xs text-slate-400 italic text-left">Belum ada kelas yang ditugaskan untuk Anda.</p>
                         ) : (
-                          <div className="flex flex-wrap gap-1.5 p-3 rounded-xl border border-slate-100 bg-slate-50/50">
-                            {activeClassIds.map(clsId => {
-                              const isSelected = tClassIds.includes(clsId);
-                              const classObj = classes.find(c => c.id === clsId);
-                              return (
-                                <button
-                                  type="button"
-                                  key={clsId}
-                                  onClick={() => {
-                                    if (isSelected) {
-                                      setTClassIds(tClassIds.filter(id => id !== clsId));
-                                    } else {
-                                      if (modalType === 'edit') {
-                                        setTClassIds([clsId]);
+                          <div className="space-y-1.5">
+                            <div className="flex flex-wrap gap-1.5 p-3 rounded-xl border border-slate-200/80 bg-slate-50/50">
+                              {activeClassIds.map(clsId => {
+                                const isSelected = tClassIds.includes(clsId);
+                                const classObj = classes.find(c => c.id === clsId);
+                                return (
+                                  <button
+                                    type="button"
+                                    key={clsId}
+                                    onClick={() => {
+                                      if (isSelected) {
+                                        setTClassIds(tClassIds.filter(id => id !== clsId));
                                       } else {
                                         setTClassIds([...tClassIds, clsId]);
                                       }
-                                    }
-                                  }}
-                                  className={`px-3 py-2 rounded-lg text-xs font-bold border transition duration-150 cursor-pointer select-none ${
-                                    isSelected 
-                                      ? 'bg-teal-600 border-teal-600 text-white shadow-xs' 
-                                      : 'bg-white border-slate-250 text-slate-700 hover:bg-slate-50'
-                                  }`}
-                                >
-                                  Kelas {classObj?.name || clsId}
-                                </button>
-                              );
-                            })}
+                                    }}
+                                    className={`px-3 py-2 rounded-lg text-xs font-bold border transition duration-150 cursor-pointer select-none flex items-center gap-1.5 ${
+                                      isSelected 
+                                        ? 'bg-teal-600 border-teal-600 text-white shadow-xs' 
+                                        : 'bg-white border-slate-250 text-slate-700 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    {isSelected && <span className="text-[10px]">✓</span>}
+                                    <span>Kelas {classObj?.name || clsId}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <div className="flex justify-between items-center text-[10px] px-1">
+                              {tClassIds.length === 0 ? (
+                                <p className="text-red-500 font-semibold">* Wajib memilih minimal 1 kelas tujuan.</p>
+                              ) : (
+                                <p className="text-teal-700 font-bold">Terpilih: {tClassIds.length} kelas tujuan</p>
+                              )}
+                            </div>
                           </div>
-                        )}
-                        {tClassIds.length === 0 && (
-                          <p className="text-[10px] text-red-500 font-semibold mt-1 text-left">* Wajib memilih minimal 1 kelas tujuan.</p>
                         )}
                       </div>
                     </div>
