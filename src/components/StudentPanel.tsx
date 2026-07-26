@@ -116,8 +116,14 @@ export default function StudentPanel() {
   };
 
   // Filter content matching Student's Class
-  const studentMaterials = materials.filter(m => m.classId === studentClassId);
-  const studentAssignments = assignments.filter(a => a.classId === studentClassId);
+  const isClassForStudent = (classIdStr: string | undefined, studentClass: string) => {
+    if (!classIdStr || !studentClass) return false;
+    const classesArr = classIdStr.split(',').map(c => c.trim());
+    return classesArr.includes(studentClass);
+  };
+
+  const studentMaterials = materials.filter(m => isClassForStudent(m.classId, studentClassId));
+  const studentAssignments = assignments.filter(a => isClassForStudent(a.classId, studentClassId));
   
   // Check if current active assignment modal has a submission
   const modalStudentGrade = activeAsgDetail ? grades.find(g => g.studentId === currentUser?.id && g.assignmentId === activeAsgDetail.id) : null;

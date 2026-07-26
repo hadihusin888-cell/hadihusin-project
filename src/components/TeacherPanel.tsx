@@ -104,21 +104,14 @@ export default function TeacherPanel() {
     e.preventDefault();
     if (!mTitle || mClassIds.length === 0 || !mSubjectId) return;
 
+    const combinedClassId = mClassIds.join(', ');
+
     if (modalType === 'create') {
-      mClassIds.forEach(classId => {
-        addMaterial(mTitle, mDesc, mLink, classId, mSubjectId, currentUser!.id);
-      });
-      triggerToast(`Materi berhasil diunggah ke ${mClassIds.length} kelas!`);
+      addMaterial(mTitle, mDesc, mLink, combinedClassId, mSubjectId, currentUser!.id);
+      triggerToast(`Materi berhasil diunggah ke kelas ${combinedClassId}!`);
     } else if (modalType === 'edit' && editingId) {
-      editMaterial(editingId, mTitle, mDesc, mLink, mClassIds[0], mSubjectId);
-      if (mClassIds.length > 1) {
-        mClassIds.slice(1).forEach(classId => {
-          addMaterial(mTitle, mDesc, mLink, classId, mSubjectId, currentUser!.id);
-        });
-        triggerToast(`Materi berhasil diperbarui & ditambahkan ke ${mClassIds.length} kelas!`);
-      } else {
-        triggerToast('Materi berhasil diperbarui!');
-      }
+      editMaterial(editingId, mTitle, mDesc, mLink, combinedClassId, mSubjectId);
+      triggerToast('Materi berhasil diperbarui!');
     }
     closeModal();
   };
@@ -128,21 +121,14 @@ export default function TeacherPanel() {
     e.preventDefault();
     if (!tTitle || tClassIds.length === 0 || !tSubjectId || !tDueDate) return;
 
+    const combinedClassId = tClassIds.join(', ');
+
     if (modalType === 'create') {
-      tClassIds.forEach(classId => {
-        addAssignment(tTitle, tDesc, tDueDate, tLink, classId, tSubjectId, currentUser!.id, tFormEnabled, tPreviewEnabled);
-      });
-      triggerToast(`Tugas latihan berhasil diposting ke ${tClassIds.length} kelas!`);
+      addAssignment(tTitle, tDesc, tDueDate, tLink, combinedClassId, tSubjectId, currentUser!.id, tFormEnabled, tPreviewEnabled);
+      triggerToast(`Tugas latihan berhasil diposting ke kelas ${combinedClassId}!`);
     } else if (modalType === 'edit' && editingId) {
-      editAssignment(editingId, tTitle, tDesc, tDueDate, tLink, tClassIds[0], tSubjectId, tFormEnabled, tPreviewEnabled);
-      if (tClassIds.length > 1) {
-        tClassIds.slice(1).forEach(classId => {
-          addAssignment(tTitle, tDesc, tDueDate, tLink, classId, tSubjectId, currentUser!.id, tFormEnabled, tPreviewEnabled);
-        });
-        triggerToast(`Tugas latihan berhasil diperbarui & ditambahkan ke ${tClassIds.length} kelas!`);
-      } else {
-        triggerToast('Tugas latihan berhasil diperbarui!');
-      }
+      editAssignment(editingId, tTitle, tDesc, tDueDate, tLink, combinedClassId, tSubjectId, tFormEnabled, tPreviewEnabled);
+      triggerToast('Tugas latihan berhasil diperbarui!');
     }
     closeModal();
   };
@@ -191,14 +177,16 @@ export default function TeacherPanel() {
       setMTitle(item.title);
       setMDesc(item.description);
       setMLink(item.link);
-      setMClassIds([item.classId]);
+      const classesArr = item.classId ? item.classId.split(',').map((c: string) => c.trim()).filter(Boolean) : [];
+      setMClassIds(classesArr);
       setMSubjectId(item.subjectId);
     } else if (entity === 'tugas') {
       setTTitle(item.title);
       setTDesc(item.description);
       setTDueDate(item.dueDate);
       setTLink(item.link);
-      setTClassIds([item.classId]);
+      const classesArr = item.classId ? item.classId.split(',').map((c: string) => c.trim()).filter(Boolean) : [];
+      setTClassIds(classesArr);
       setTSubjectId(item.subjectId);
       setTFormEnabled(item.formEnabled);
       setTPreviewEnabled(item.previewEnabled ?? true);
@@ -256,12 +244,14 @@ export default function TeacherPanel() {
   // Filtered by Grade level (Jenjang Kelas) helper
   const filteredMaterials = teacherMaterials.filter(m => {
     if (mGradeFilter === 'ALL') return true;
-    return m.classId.startsWith(mGradeFilter);
+    const targetClasses = m.classId ? m.classId.split(',').map(c => c.trim()) : [];
+    return targetClasses.some(c => c.startsWith(mGradeFilter));
   });
 
   const filteredAssignments = teacherAssignments.filter(a => {
     if (tGradeFilter === 'ALL') return true;
-    return a.classId.startsWith(tGradeFilter);
+    const targetClasses = a.classId ? a.classId.split(',').map(c => c.trim()) : [];
+    return targetClasses.some(c => c.startsWith(tGradeFilter));
   });
 
   // Gather grades filtered by assignments made by this teacher
@@ -1474,11 +1464,12 @@ export default function TeacherPanel() {
                   {/* METADATA INFORMASI */}
                   {(() => {
                     const asgObj = assignments.find(a => a.id === selectedAsgFilter);
-                    const classObj = classes.find(c => c.id === asgObj?.classId);
+                    const targetClassIds = asgObj?.classId ? asgObj.classId.split(',').map(s => s.trim()) : [];
+                    const targetClassNames = targetClassIds.map(id => classes.find(c => c.id === id)?.name || id).join(', ');
                     const subObj = subjects.find(s => s.id === asgObj?.subjectId);
                     const teacherObj = teachers.find(t => t.id === asgObj?.teacherId);
 
-                    const classStudents = students.filter(s => s.classId === asgObj?.classId);
+                    const classStudents = students.filter(s => targetClassIds.includes(s.classId));
                     const sortedClassStudents = [...classStudents].sort((a, b) => (a.nis || '').localeCompare(b.nis || ''));
 
                     return (
@@ -1489,7 +1480,7 @@ export default function TeacherPanel() {
                             <p>Nama Latihan/Tugas : <b className="text-slate-900">{asgObj?.title || '-'}</b></p>
                           </div>
                           <div className="space-y-1.5 text-left md:pl-8">
-                            <p>Kelas / Jenjang : <b className="text-slate-900">{classObj?.name || asgObj?.classId || '-'}</b></p>
+                            <p>Kelas / Jenjang : <b className="text-slate-900">{targetClassNames || '-'}</b></p>
                             <p>Guru Pengampu : <b className="text-slate-900">{teacherObj?.name || '-'}</b></p>
                           </div>
                         </div>
