@@ -629,73 +629,102 @@ export default function TeacherPanel() {
                   : `Tidak ada materi untuk jenjang kelas ${mGradeFilter === 'ALL' ? '' : mGradeFilter}.`}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredMaterials.map(m => {
-                  const sName = subjects.find(s => s.id === m.subjectId)?.name || m.subjectId;
+              <div className="space-y-10">
+                {(mGradeFilter === 'ALL' ? ['7', '8', '9'] as const : [mGradeFilter]).map(grade => {
+                  const itemsInGrade = filteredMaterials.filter(m => {
+                    const classes = m.classId ? m.classId.split(',').map(c => c.trim()) : [];
+                    return classes.some(c => c.startsWith(grade));
+                  });
+
+                  if (itemsInGrade.length === 0 && mGradeFilter === 'ALL') return null;
+
                   return (
-                    <div key={m.id} className="bg-white p-5 rounded-2xl border border-slate-200 transition-all duration-350 hover:shadow-lg hover:shadow-slate-200/40 hover:border-slate-300 space-y-4 flex flex-col justify-between">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-                          <div className="flex flex-wrap gap-1 max-w-[220px]">
-                            {m.classId ? m.classId.split(',').map(c => c.trim()).filter(Boolean).map(clsName => (
-                              <span key={clsName} className="bg-teal-50/70 text-teal-800 text-[10px] font-black px-2 py-0.5 rounded-md border border-teal-100 tracking-wider uppercase">
-                                Kelas {clsName}
-                              </span>
-                            )) : (
-                              <span className="bg-teal-50/70 text-teal-800 text-[10px] font-black px-2 py-0.5 rounded-md border border-teal-100 tracking-wider uppercase">
-                                Semua Kelas
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[10px] text-slate-400 font-mono font-bold tracking-tight inline-flex items-center gap-1 shrink-0">
-                            <Calendar className="w-3.5 h-3.5 text-slate-300" /> {new Date(m.createdAt).toLocaleDateString('id-ID')}
+                    <div key={grade} className="space-y-4">
+                      {/* Section Header for Grade */}
+                      <div className="flex items-center justify-between border-l-4 border-teal-600 pl-3.5 py-1.5 bg-slate-50/80 rounded-r-xl border-y border-r border-slate-200/60 pr-4">
+                        <h4 className="font-black text-slate-800 text-sm md:text-base flex items-center gap-2">
+                          <span>Materi Pembelajaran Kelas {grade}</span>
+                          <span className="bg-teal-100 text-teal-800 text-[10px] font-mono px-2.5 py-0.5 rounded-full font-black">
+                            {itemsInGrade.length} Materi
                           </span>
-                        </div>
-                        <h4 className="font-serif-heading font-extrabold text-slate-900 text-sm tracking-tight leading-snug text-left">{m.title}</h4>
-                        <p className="text-xs text-slate-600 font-medium line-clamp-3 text-left leading-relaxed">{m.description || 'Tidak ada deskripsi tambahan'}</p>
+                        </h4>
                       </div>
 
-                      <div className="border-t border-slate-100 pt-3.5 flex items-center justify-between">
-                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-205/60 max-w-[140px] truncate" title={sName}>
-                          {sName}
+                      {itemsInGrade.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic py-4 pl-4">Belum ada materi untuk Kelas {grade}.</p>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {itemsInGrade.map(m => {
+                            const sName = subjects.find(s => s.id === m.subjectId)?.name || m.subjectId;
+                            return (
+                              <div key={m.id} className="bg-white p-5 rounded-2xl border border-slate-200 transition-all duration-350 hover:shadow-lg hover:shadow-slate-200/40 hover:border-slate-300 space-y-4 flex flex-col justify-between">
+                                <div className="space-y-3">
+                                  <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
+                                    <div className="flex flex-wrap items-center gap-1.5 max-w-[220px]">
+                                      {m.classId ? m.classId.split(',').map(c => c.trim()).filter(Boolean).map(clsName => (
+                                        <span key={clsName} className="bg-teal-50/90 text-teal-800 text-[10px] font-black px-2.5 py-0.5 rounded-md border border-teal-200/70 tracking-wide uppercase inline-block">
+                                          Kelas {clsName}
+                                        </span>
+                                      )) : (
+                                        <span className="bg-teal-50/90 text-teal-800 text-[10px] font-black px-2.5 py-0.5 rounded-md border border-teal-200/70 tracking-wide uppercase inline-block">
+                                          Semua Kelas
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="text-[10px] text-slate-400 font-mono font-bold tracking-tight inline-flex items-center gap-1 shrink-0 pt-0.5">
+                                      <Calendar className="w-3.5 h-3.5 text-slate-300" /> {new Date(m.createdAt).toLocaleDateString('id-ID')}
+                                    </span>
+                                  </div>
+                                  <h4 className="font-serif-heading font-extrabold text-slate-900 text-sm tracking-tight leading-snug text-left">{m.title}</h4>
+                                  <p className="text-xs text-slate-600 font-medium line-clamp-3 text-left leading-relaxed">{m.description || 'Tidak ada deskripsi tambahan'}</p>
+                                </div>
+
+                                <div className="border-t border-slate-100 pt-3.5 flex items-center justify-between">
+                                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-205/60 max-w-[140px] truncate" title={sName}>
+                                    {sName}
+                                  </div>
+                                  <div className="flex gap-1.5">
+                                    {m.link && (
+                                      <a
+                                        href={m.link}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-slate-500 hover:text-indigo-600 w-9 h-9 rounded-xl border border-slate-150 flex items-center justify-center bg-slate-50/80 hover:bg-slate-100/90 transition-all cursor-pointer"
+                                        title="Buka Link Canva/Materi"
+                                      >
+                                        <ExternalLink className="w-4 h-4" />
+                                      </a>
+                                    )}
+                                    <button
+                                      onClick={() => openEditModal('materi', m)}
+                                      className="text-slate-500 hover:text-teal-600 w-9 h-9 rounded-xl border border-slate-150 flex items-center justify-center bg-slate-50/80 hover:bg-slate-100/95 cursor-pointer transition-all"
+                                      title="Edit Materi"
+                                    >
+                                      <Edit3 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => setConfirmDialog({
+                                        isOpen: true,
+                                        title: 'Hapus Materi Pembelajaran',
+                                        message: 'Apakah Anda yakin ingin menghapus materi pembelajaran ini secara permanen dari sistem?',
+                                        onConfirm: () => {
+                                          const idsToDelete = (m as any).allIds || [m.id];
+                                          idsToDelete.forEach((idToDelete: string) => deleteMaterial(idToDelete));
+                                          triggerToast('Materi berhasil dihapus!');
+                                        }
+                                      })}
+                                      className="text-slate-500 hover:text-red-700 w-9 h-9 rounded-xl border border-slate-150 flex items-center justify-center bg-slate-50/80 hover:bg-slate-100/95 cursor-pointer transition-all"
+                                      title="Hapus Materi"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                        <div className="flex gap-1.5">
-                          {m.link && (
-                            <a
-                              href={m.link}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-slate-500 hover:text-indigo-600 w-9 h-9 rounded-xl border border-slate-150 flex items-center justify-center bg-slate-50/80 hover:bg-slate-100/90 transition-all cursor-pointer"
-                              title="Buka Link Canva/Materi"
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                            </a>
-                          )}
-                          <button
-                            onClick={() => openEditModal('materi', m)}
-                            className="text-slate-500 hover:text-teal-600 w-9 h-9 rounded-xl border border-slate-150 flex items-center justify-center bg-slate-50/80 hover:bg-slate-100/95 cursor-pointer transition-all"
-                            title="Edit Materi"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setConfirmDialog({
-                              isOpen: true,
-                              title: 'Hapus Materi Pembelajaran',
-                              message: 'Apakah Anda yakin ingin menghapus materi pembelajaran ini secara permanen dari sistem?',
-                              onConfirm: () => {
-                                const idsToDelete = (m as any).allIds || [m.id];
-                                idsToDelete.forEach((idToDelete: string) => deleteMaterial(idToDelete));
-                                triggerToast('Materi berhasil dihapus!');
-                              }
-                            })}
-                            className="text-slate-500 hover:text-red-700 w-9 h-9 rounded-xl border border-slate-150 flex items-center justify-center bg-slate-50/80 hover:bg-slate-100/95 cursor-pointer transition-all"
-                            title="Hapus Materi"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })}
@@ -750,101 +779,130 @@ export default function TeacherPanel() {
                   : `Tidak ada tugas latihan untuk jenjang kelas ${tGradeFilter === 'ALL' ? '' : tGradeFilter}.`}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredAssignments.map(a => {
-                  const sName = subjects.find(sub => sub.id === a.subjectId)?.name || a.subjectId;
+              <div className="space-y-10">
+                {(tGradeFilter === 'ALL' ? ['7', '8', '9'] as const : [tGradeFilter]).map(grade => {
+                  const itemsInGrade = filteredAssignments.filter(a => {
+                    const classes = a.classId ? a.classId.split(',').map(c => c.trim()) : [];
+                    return classes.some(c => c.startsWith(grade));
+                  });
+
+                  if (itemsInGrade.length === 0 && tGradeFilter === 'ALL') return null;
+
                   return (
-                    <div key={a.id} className="bg-white p-5 rounded-2xl border border-slate-200 transition-all duration-350 hover:shadow-lg hover:shadow-slate-200/40 hover:border-slate-300 space-y-4 flex flex-col justify-between">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-                          <div className="flex flex-wrap gap-1 max-w-[220px]">
-                            {a.classId ? a.classId.split(',').map(c => c.trim()).filter(Boolean).map(clsName => (
-                              <span key={clsName} className="bg-slate-100/90 text-slate-700 text-[10px] font-black px-2 py-0.5 rounded-md border border-slate-205 tracking-wider uppercase">
-                                Kelas {clsName}
-                              </span>
-                            )) : (
-                              <span className="bg-slate-100/90 text-slate-700 text-[10px] font-black px-2 py-0.5 rounded-md border border-slate-205 tracking-wider uppercase">
-                                Semua Kelas
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[10px] px-2.5 py-1 bg-indigo-50 border border-indigo-150 text-indigo-700 rounded-lg font-bold uppercase font-mono tracking-tight shrink-0">
-                            OFF-{a.id.substring(4, 8) || a.id}
+                    <div key={grade} className="space-y-4">
+                      {/* Section Header for Grade */}
+                      <div className="flex items-center justify-between border-l-4 border-indigo-600 pl-3.5 py-1.5 bg-slate-50/80 rounded-r-xl border-y border-r border-slate-200/60 pr-4">
+                        <h4 className="font-black text-slate-800 text-sm md:text-base flex items-center gap-2">
+                          <span>Tugas Latihan Kelas {grade}</span>
+                          <span className="bg-indigo-100 text-indigo-800 text-[10px] font-mono px-2.5 py-0.5 rounded-full font-black">
+                            {itemsInGrade.length} Tugas
                           </span>
-                        </div>
-                        <h4 className="font-serif-heading font-extrabold text-slate-900 text-sm tracking-tight leading-snug text-left">{a.title}</h4>
-                        <p className="text-xs text-slate-600 font-medium line-clamp-3 leading-relaxed text-left">{a.description}</p>
-                        
-                        <div className="grid grid-cols-2 gap-3 bg-slate-50/80 border border-slate-201/50 p-3 rounded-xl mt-3 text-left">
-                          <div>
-                            <span className="text-[9px] uppercase tracking-wider font-extrabold text-slate-400 block mb-0.5">Batas Waktu</span>
-                            <span className="text-xs font-bold text-slate-700 font-mono inline-flex items-center gap-1">
-                              <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" /> {a.dueDate}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-[9px] uppercase tracking-wider font-extrabold text-slate-400 block mb-0.5">Form Pengumpulan</span>
-                            <span className={`text-xs font-black inline-flex items-center gap-1 ${a.formEnabled ? 'text-teal-600' : 'text-amber-500'}`}>
-                              {a.formEnabled ? (
-                                <>
-                                  <span className="relative flex h-2 w-2 shrink-0">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-500"></span>
-                                  </span>
-                                  <span className="font-mono uppercase font-black tracking-wider text-2xs">AKTIF</span>
-                                </>
-                              ) : (
-                                <>
-                                  <span className="inline-flex rounded-full h-2 w-2 bg-amber-400 shrink-0"></span>
-                                  <span className="font-mono uppercase font-black tracking-wider text-2xs">NONAKTIF</span>
-                                </>
-                              )}
-                            </span>
-                          </div>
-                        </div>
+                        </h4>
                       </div>
 
-                      <div className="border-t border-slate-100 pt-3.5 flex items-center justify-between">
-                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-205/60 max-w-[140px] truncate" title={sName}>
-                          {sName}
+                      {itemsInGrade.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic py-4 pl-4">Belum ada tugas untuk Kelas {grade}.</p>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {itemsInGrade.map(a => {
+                            const sName = subjects.find(sub => sub.id === a.subjectId)?.name || a.subjectId;
+                            return (
+                              <div key={a.id} className="bg-white p-5 rounded-2xl border border-slate-200 transition-all duration-350 hover:shadow-lg hover:shadow-slate-200/40 hover:border-slate-300 space-y-4 flex flex-col justify-between">
+                                <div className="space-y-3">
+                                  <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
+                                    <div className="flex flex-wrap items-center gap-1.5 max-w-[220px]">
+                                      {a.classId ? a.classId.split(',').map(c => c.trim()).filter(Boolean).map(clsName => (
+                                        <span key={clsName} className="bg-slate-100/90 text-slate-700 text-[10px] font-black px-2.5 py-0.5 rounded-md border border-slate-205 tracking-wide uppercase inline-block">
+                                          Kelas {clsName}
+                                        </span>
+                                      )) : (
+                                        <span className="bg-slate-100/90 text-slate-700 text-[10px] font-black px-2.5 py-0.5 rounded-md border border-slate-205 tracking-wide uppercase inline-block">
+                                          Semua Kelas
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="text-[10px] px-2.5 py-1 bg-indigo-50 border border-indigo-150 text-indigo-700 rounded-lg font-bold uppercase font-mono tracking-tight shrink-0">
+                                      OFF-{a.id.substring(4, 8) || a.id}
+                                    </span>
+                                  </div>
+                                  <h4 className="font-serif-heading font-extrabold text-slate-900 text-sm tracking-tight leading-snug text-left">{a.title}</h4>
+                                  <p className="text-xs text-slate-600 font-medium line-clamp-3 leading-relaxed text-left">{a.description}</p>
+                                  
+                                  <div className="grid grid-cols-2 gap-3 bg-slate-50/80 border border-slate-201/50 p-3 rounded-xl mt-3 text-left">
+                                    <div>
+                                      <span className="text-[9px] uppercase tracking-wider font-extrabold text-slate-400 block mb-0.5">Batas Waktu</span>
+                                      <span className="text-xs font-bold text-slate-700 font-mono inline-flex items-center gap-1">
+                                        <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" /> {a.dueDate}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="text-[9px] uppercase tracking-wider font-extrabold text-slate-400 block mb-0.5">Form Pengumpulan</span>
+                                      <span className={`text-xs font-black inline-flex items-center gap-1 ${a.formEnabled ? 'text-teal-600' : 'text-amber-500'}`}>
+                                        {a.formEnabled ? (
+                                          <>
+                                            <span className="relative flex h-2 w-2 shrink-0">
+                                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+                                              <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-500"></span>
+                                            </span>
+                                            <span className="font-mono uppercase font-black tracking-wider text-2xs">AKTIF</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <span className="inline-flex rounded-full h-2 w-2 bg-amber-400 shrink-0"></span>
+                                            <span className="font-mono uppercase font-black tracking-wider text-2xs">NONAKTIF</span>
+                                          </>
+                                        )}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="border-t border-slate-100 pt-3.5 flex items-center justify-between">
+                                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-205/60 max-w-[140px] truncate" title={sName}>
+                                    {sName}
+                                  </div>
+                                  <div className="flex gap-1.5">
+                                    {a.link && (
+                                      <a
+                                        href={a.link}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-slate-500 hover:text-indigo-600 w-9 h-9 rounded-xl border border-slate-150 flex items-center justify-center bg-slate-50/80 hover:bg-slate-100/90 transition-all cursor-pointer"
+                                        title="Buka Link Quizizz/Latihan"
+                                      >
+                                        <ExternalLink className="w-4 h-4" />
+                                      </a>
+                                    )}
+                                    <button
+                                      onClick={() => openEditModal('tugas', a)}
+                                      className="text-slate-500 hover:text-teal-600 w-9 h-9 rounded-xl border border-slate-150 flex items-center justify-center bg-slate-50/80 hover:bg-slate-100/95 cursor-pointer transition-all"
+                                      title="Edit Tugas"
+                                    >
+                                      <Edit3 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => setConfirmDialog({
+                                        isOpen: true,
+                                        title: 'Hapus Tugas Latihan',
+                                        message: 'Apakah Anda yakin ingin menghapus tugas latihan ini? Riwayat pengisian nilai dan riwayat pengumpulan siswa terkait tugas ini akan ikut terhapus secara permanen.',
+                                        onConfirm: () => {
+                                          const idsToDelete = (a as any).allIds || [a.id];
+                                          idsToDelete.forEach((idToDelete: string) => deleteAssignment(idToDelete));
+                                          triggerToast('Tugas latihan berhasil dihapus!');
+                                        }
+                                      })}
+                                      className="text-slate-500 hover:text-red-700 w-9 h-9 rounded-xl border border-slate-150 flex items-center justify-center bg-slate-50/80 hover:bg-slate-100/95 cursor-pointer transition-all"
+                                      title="Hapus Tugas"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                        <div className="flex gap-1.5">
-                          {a.link && (
-                            <a
-                              href={a.link}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-slate-500 hover:text-indigo-600 w-9 h-9 rounded-xl border border-slate-150 flex items-center justify-center bg-slate-50/80 hover:bg-slate-100/90 transition-all cursor-pointer"
-                              title="Buka Link Quizizz/Latihan"
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                            </a>
-                          )}
-                          <button
-                            onClick={() => openEditModal('tugas', a)}
-                            className="text-slate-500 hover:text-teal-600 w-9 h-9 rounded-xl border border-slate-150 flex items-center justify-center bg-slate-50/80 hover:bg-slate-100/95 cursor-pointer transition-all"
-                            title="Edit Tugas"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setConfirmDialog({
-                              isOpen: true,
-                              title: 'Hapus Tugas Latihan',
-                              message: 'Apakah Anda yakin ingin menghapus tugas latihan ini? Riwayat pengisian nilai dan riwayat pengumpulan siswa terkait tugas ini akan ikut terhapus secara permanen.',
-                              onConfirm: () => {
-                                const idsToDelete = (a as any).allIds || [a.id];
-                                idsToDelete.forEach((idToDelete: string) => deleteAssignment(idToDelete));
-                                triggerToast('Tugas latihan berhasil dihapus!');
-                              }
-                            })}
-                            className="text-slate-500 hover:text-red-700 w-9 h-9 rounded-xl border border-slate-150 flex items-center justify-center bg-slate-50/80 hover:bg-slate-100/95 cursor-pointer transition-all"
-                            title="Hapus Tugas"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })}
