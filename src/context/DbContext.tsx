@@ -318,17 +318,13 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     });
     unsubscribes.push(unsubStudents);
 
-    // 5. Materials onSnapshot (Optimized!)
+    // 5. Materials onSnapshot
     let materialsQuery;
-    if (currentUser?.role === 'ADMIN') {
-      materialsQuery = query(collection(db, 'materials'), limit(200));
+    if (currentUser?.role === 'ADMIN' || currentUser?.role === 'STUDENT') {
+      materialsQuery = query(collection(db, 'materials'), limit(300));
     } else if (currentUser?.role === 'TEACHER') {
       // Only download their own materials
       materialsQuery = query(collection(db, 'materials'), where('teacherId', '==', currentUser.id));
-    } else if (currentUser?.role === 'STUDENT') {
-      // Only download materials for their class
-      const studentClassId = currentUser.meta?.classId || 'default';
-      materialsQuery = query(collection(db, 'materials'), where('classId', '==', studentClassId));
     } else {
       materialsQuery = query(collection(db, 'materials'), where('classId', '==', 'NOT_LOGGED_IN'));
     }
@@ -347,17 +343,13 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     });
     unsubscribes.push(unsubMaterials);
 
-    // 6. Assignments onSnapshot (Optimized!)
+    // 6. Assignments onSnapshot
     let assignmentsQuery;
-    if (currentUser?.role === 'ADMIN') {
-      assignmentsQuery = query(collection(db, 'assignments'), limit(200));
+    if (currentUser?.role === 'ADMIN' || currentUser?.role === 'STUDENT') {
+      assignmentsQuery = query(collection(db, 'assignments'), limit(300));
     } else if (currentUser?.role === 'TEACHER') {
       // Only download their own assignments
       assignmentsQuery = query(collection(db, 'assignments'), where('teacherId', '==', currentUser.id));
-    } else if (currentUser?.role === 'STUDENT') {
-      // Only download assignments for their class
-      const studentClassId = currentUser.meta?.classId || 'default';
-      assignmentsQuery = query(collection(db, 'assignments'), where('classId', '==', studentClassId));
     } else {
       assignmentsQuery = query(collection(db, 'assignments'), where('classId', '==', 'NOT_LOGGED_IN'));
     }

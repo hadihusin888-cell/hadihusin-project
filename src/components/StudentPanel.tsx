@@ -116,10 +116,41 @@ export default function StudentPanel() {
   };
 
   // Filter content matching Student's Class
-  const isClassForStudent = (classIdStr: string | undefined, studentClass: string) => {
-    if (!classIdStr || !studentClass) return false;
-    const classesArr = classIdStr.split(',').map(c => c.trim());
-    return classesArr.includes(studentClass);
+  const isClassForStudent = (materialClassStr: string | undefined, studentClassIdVal: string) => {
+    if (!materialClassStr) return true; // If empty/undefined, visible to all
+    
+    const classTokens = materialClassStr.split(',').map(c => c.trim().toLowerCase()).filter(Boolean);
+    if (classTokens.length === 0) return true;
+    if (classTokens.includes('semua kelas') || classTokens.includes('all')) return true;
+
+    // Student class information
+    const studentClassObj = classes.find(c => c.id === studentClassIdVal || c.name === studentClassIdVal);
+    const sIdClean = studentClassIdVal ? studentClassIdVal.trim().toLowerCase() : '';
+    const sNameClean = studentClassObj ? studentClassObj.name.trim().toLowerCase() : sIdClean;
+    
+    // Extract grade level number e.g. "9" from "9A", "Kelas 9B", "cls-9a"
+    const gradeMatch = (sNameClean || sIdClean).match(/\b(7|8|9)\b/) || (sNameClean || sIdClean).match(/(7|8|9)/);
+    const studentGrade = gradeMatch ? gradeMatch[1] : null;
+
+    return classTokens.some(token => {
+      // 1. Exact match with Student class ID or Name
+      if (token === sIdClean || token === sNameClean) return true;
+
+      // 2. Clean 'kelas ' prefix e.g. 'kelas 9a' -> '9a'
+      const cleanToken = token.replace(/^kelas\s+/, '').trim();
+      if (cleanToken === sIdClean || cleanToken === sNameClean) return true;
+
+      // 3. Grade level match e.g. material is for '9' or 'kelas 9' and student is in '9A'
+      if (studentGrade) {
+        if (cleanToken === studentGrade || token === `kelas ${studentGrade}`) return true;
+      }
+
+      // 4. Prefix/suffix or partial match e.g. token '9a' matches student name '9a' or '9-a'
+      if (sNameClean && (sNameClean.startsWith(cleanToken) || cleanToken.startsWith(sNameClean))) return true;
+      if (sIdClean && (sIdClean.startsWith(cleanToken) || cleanToken.startsWith(sIdClean))) return true;
+
+      return false;
+    });
   };
 
   const studentMaterials = materials.filter(m => isClassForStudent(m.classId, studentClassId));
