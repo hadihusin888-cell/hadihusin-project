@@ -232,10 +232,15 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       }
     };
 
-    // 1. Classes onSnapshot (Always active or with limit for fast reference)
-    const classesQuery = currentUser?.role === 'ADMIN' 
-      ? collection(db, 'classes') 
-      : query(collection(db, 'classes'), limit(50));
+    // 1. Classes onSnapshot (Optimized per role)
+    let classesQuery;
+    if (!currentUser) {
+      classesQuery = query(collection(db, 'classes'), where('id', '==', 'NOT_LOGGED_IN'));
+    } else if (currentUser.role === 'ADMIN') {
+      classesQuery = query(collection(db, 'classes'), limit(100));
+    } else {
+      classesQuery = query(collection(db, 'classes'), limit(50));
+    }
 
     const unsubClasses = onSnapshot(classesQuery, (snapshot) => {
       const list: Class[] = [];
@@ -251,8 +256,14 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     });
     unsubscribes.push(unsubClasses);
 
-    // 2. Subjects onSnapshot (Capped to optimized reads limit)
-    const subjectsQuery = query(collection(db, 'subjects'), limit(100));
+    // 2. Subjects onSnapshot (Optimized per role)
+    let subjectsQuery;
+    if (!currentUser) {
+      subjectsQuery = query(collection(db, 'subjects'), where('id', '==', 'NOT_LOGGED_IN'));
+    } else {
+      subjectsQuery = query(collection(db, 'subjects'), limit(50));
+    }
+
     const unsubSubjects = onSnapshot(subjectsQuery, (snapshot) => {
       const list: Subject[] = [];
       snapshot.forEach(doc => {
@@ -267,8 +278,14 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     });
     unsubscribes.push(unsubSubjects);
 
-    // 3. Teachers onSnapshot (Capped to optimized limit)
-    const teachersQuery = query(collection(db, 'teachers'), limit(100));
+    // 3. Teachers onSnapshot (Optimized per role)
+    let teachersQuery;
+    if (!currentUser) {
+      teachersQuery = query(collection(db, 'teachers'), where('id', '==', 'NOT_LOGGED_IN'));
+    } else {
+      teachersQuery = query(collection(db, 'teachers'), limit(50));
+    }
+
     const unsubTeachers = onSnapshot(teachersQuery, (snapshot) => {
       const list: Teacher[] = [];
       snapshot.forEach(doc => {
@@ -283,24 +300,23 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     });
     unsubscribes.push(unsubTeachers);
 
-    // 4. Students onSnapshot (Optimized using Filters depending on who is logged in!)
+    // 4. Students onSnapshot (Optimized per role)
     let studentsQuery;
     if (currentUser?.role === 'ADMIN') {
-      studentsQuery = collection(db, 'students');
+      studentsQuery = query(collection(db, 'students'), limit(250));
     } else if (currentUser?.role === 'STUDENT') {
-      // Students only need classmate peers! Extremely high cost savings!
+      // Students only need classmate peers in their own class
       const studentClassId = currentUser.meta?.classId || 'default';
       studentsQuery = query(collection(db, 'students'), where('classId', '==', studentClassId));
     } else if (currentUser?.role === 'TEACHER') {
       // Get classes this teacher is assigned to from their metadata
       const classIds = currentUser.meta?.classIds || [];
       if (classIds.length > 0) {
-        studentsQuery = query(collection(db, 'students'), where('classId', 'in', classIds));
+        studentsQuery = query(collection(db, 'students'), where('classId', 'in', classIds.slice(0, 10)));
       } else {
         studentsQuery = query(collection(db, 'students'), limit(30));
       }
     } else {
-      // Download nothing if not logged in
       studentsQuery = query(collection(db, 'students'), where('classId', '==', 'NOT_LOGGED_IN'));
     }
 
@@ -318,13 +334,16 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     });
     unsubscribes.push(unsubStudents);
 
-    // 5. Materials onSnapshot
+    // 5. Materials onSnapshot (Optimized per role)
     let materialsQuery;
-    if (currentUser?.role === 'ADMIN' || currentUser?.role === 'STUDENT') {
-      materialsQuery = query(collection(db, 'materials'), limit(300));
+    if (currentUser?.role === 'ADMIN') {
+      materialsQuery = query(collection(db, 'materials'), limit(200));
     } else if (currentUser?.role === 'TEACHER') {
-      // Only download their own materials
+      // Teachers only fetch materials they created
       materialsQuery = query(collection(db, 'materials'), where('teacherId', '==', currentUser.id));
+    } else if (currentUser?.role === 'STUDENT') {
+      // Students fetch materials capped to 150 active records
+      materialsQuery = query(collection(db, 'materials'), limit(150));
     } else {
       materialsQuery = query(collection(db, 'materials'), where('classId', '==', 'NOT_LOGGED_IN'));
     }
@@ -343,13 +362,16 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     });
     unsubscribes.push(unsubMaterials);
 
-    // 6. Assignments onSnapshot
+    // 6. Assignments onSnapshot (Optimized per role)
     let assignmentsQuery;
-    if (currentUser?.role === 'ADMIN' || currentUser?.role === 'STUDENT') {
-      assignmentsQuery = query(collection(db, 'assignments'), limit(300));
+    if (currentUser?.role === 'ADMIN') {
+      assignmentsQuery = query(collection(db, 'assignments'), limit(200));
     } else if (currentUser?.role === 'TEACHER') {
-      // Only download their own assignments
+      // Teachers only fetch assignments they created
       assignmentsQuery = query(collection(db, 'assignments'), where('teacherId', '==', currentUser.id));
+    } else if (currentUser?.role === 'STUDENT') {
+      // Students fetch assignments capped to 150 active records
+      assignmentsQuery = query(collection(db, 'assignments'), limit(150));
     } else {
       assignmentsQuery = query(collection(db, 'assignments'), where('classId', '==', 'NOT_LOGGED_IN'));
     }
@@ -368,20 +390,19 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     });
     unsubscribes.push(unsubAssignments);
 
-    // 7. Grades onSnapshot (Optimized!)
+    // 7. Grades onSnapshot (Optimized per role)
     let gradesQuery;
     if (currentUser?.role === 'ADMIN') {
-      gradesQuery = query(collection(db, 'grades'), limit(500));
+      gradesQuery = query(collection(db, 'grades'), limit(300));
     } else if (currentUser?.role === 'TEACHER') {
-      // Filter grades of classes they teach
       const classIds = currentUser.meta?.classIds || [];
       if (classIds.length > 0) {
-        gradesQuery = query(collection(db, 'grades'), where('classId', 'in', classIds));
+        gradesQuery = query(collection(db, 'grades'), where('classId', 'in', classIds.slice(0, 10)));
       } else {
         gradesQuery = query(collection(db, 'grades'), limit(30));
       }
     } else if (currentUser?.role === 'STUDENT') {
-      // Students ONLY download their own grades/submissions! HUGE reduction in read operations.
+      // Students ONLY download their own grades/submissions!
       gradesQuery = query(collection(db, 'grades'), where('studentId', '==', currentUser.id));
     } else {
       gradesQuery = query(collection(db, 'grades'), where('studentId', '==', 'NOT_LOGGED_IN'));
@@ -401,24 +422,28 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     });
     unsubscribes.push(unsubGrades);
 
-    // 8. AdminConfigs onSnapshot (Seeding admin123 by default if empty)
-    const unsubAdminConfig = onSnapshot(doc(db, 'adminConfigs', 'config'), (snapshot) => {
-      if (snapshot.exists()) {
-        const pwd = snapshot.data().adminPassword;
-        setAdminPassword(pwd || 'admin123');
-        localStorage.setItem('smp_admin_pwd', pwd || 'admin123');
-      } else {
-        setDoc(doc(db, 'adminConfigs', 'config'), { id: 'config', adminPassword: 'admin123' })
-          .catch(err => console.error("Initial seed of adminConfig failed in Firestore Cloud:", err));
-        setAdminPassword('admin123');
-        localStorage.setItem('smp_admin_pwd', 'admin123');
-      }
+    // 8. AdminConfigs onSnapshot (Only active for ADMIN role)
+    if (currentUser?.role === 'ADMIN') {
+      const unsubAdminConfig = onSnapshot(doc(db, 'adminConfigs', 'config'), (snapshot) => {
+        if (snapshot.exists()) {
+          const pwd = snapshot.data().adminPassword;
+          setAdminPassword(pwd || 'admin123');
+          localStorage.setItem('smp_admin_pwd', pwd || 'admin123');
+        } else {
+          setDoc(doc(db, 'adminConfigs', 'config'), { id: 'config', adminPassword: 'admin123' })
+            .catch(err => console.error("Initial seed of adminConfig failed in Firestore Cloud:", err));
+          setAdminPassword('admin123');
+          localStorage.setItem('smp_admin_pwd', 'admin123');
+        }
+        checkIsLoadComplete();
+      }, (error) => {
+        console.warn("Firestore listener 'adminConfigs' blocked or offline:", error);
+        checkIsLoadComplete();
+      });
+      unsubscribes.push(unsubAdminConfig);
+    } else {
       checkIsLoadComplete();
-    }, (error) => {
-      console.warn("Firestore listener 'adminConfigs' blocked or offline:", error);
-      checkIsLoadComplete();
-    });
-    unsubscribes.push(unsubAdminConfig);
+    }
 
     return () => {
       unsubscribes.forEach(unsub => unsub());
@@ -461,8 +486,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       } else if (currentUser?.role === 'TEACHER') {
         materialsQuery = query(collection(db, 'materials'), where('teacherId', '==', currentUser.id));
       } else if (currentUser?.role === 'STUDENT') {
-        const studentClassId = currentUser.meta?.classId || 'default';
-        materialsQuery = query(collection(db, 'materials'), where('classId', '==', studentClassId));
+        materialsQuery = query(collection(db, 'materials'), limit(150));
       } else {
         materialsQuery = query(collection(db, 'materials'), where('classId', '==', 'NOT_LOGGED_IN'));
       }
@@ -473,8 +497,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       } else if (currentUser?.role === 'TEACHER') {
         assignmentsQuery = query(collection(db, 'assignments'), where('teacherId', '==', currentUser.id));
       } else if (currentUser?.role === 'STUDENT') {
-        const studentClassId = currentUser.meta?.classId || 'default';
-        assignmentsQuery = query(collection(db, 'assignments'), where('classId', '==', studentClassId));
+        assignmentsQuery = query(collection(db, 'assignments'), limit(150));
       } else {
         assignmentsQuery = query(collection(db, 'assignments'), where('classId', '==', 'NOT_LOGGED_IN'));
       }
